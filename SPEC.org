@@ -1,0 +1,128 @@
+#+TITLE: T3 Code fork: actors and waves
+#+OPTIONS: num:t
+
+This file specifies what this fork adds to T3 Code. Everything it does not mention is upstream's and is left alone. Upstream's own terms are defined in [[file:docs/internals/glossary.md][docs/internals/glossary.md]]; this spec uses them unchanged and defines only the terms the fork introduces.
+
+* Objective Function
+One window for all agent work.
+
+A person who runs many long-lived agents should have each of them one click away, with a face they recognise, wherever they are in the app. The waves those agents start should be visible beside them, and what a wave is saying should be readable without leaving the thread in hand. Underneath, each provider keeps running exactly as upstream runs it.
+
+The fork stays small enough to merge upstream every week or two without dread. Every feature is judged against that.
+
+* Problem and Outcome
+** Problem
+- Long-lived threads are hard to keep in reach. With twenty or more of them, a list of titles does not scale: they are all "open", and finding one is a search.
+- A wave of workers started by one agent has no shared place to talk that is not itself an agent, and no place in the window where a person can watch it.
+- Rebuilding the provider integration to get either of these is the wrong trade. Upstream already runs each provider's own runtime and tracks its changes.
+
+** Outcome
+- Pinned threads are shown as a dock of pictures at the top of the sidebar, in every project.
+- A person sets a thread's picture from its menu. An agent can pin its own thread and set its own picture.
+- Running waves are listed in the sidebar. A wave's room opens as a tab in the right panel, from the sidebar or from the thread that started the wave.
+- The stock mobile client keeps working with no change.
+
+* Explicit Non-Goals
+- Changing how any provider is run, resumed, compacted or forked.
+- Changing upstream's subagents, side chats or delegate tool. They stay where upstream shows them.
+- A separate "actor" record. An actor is a pinned thread and nothing more.
+- Changes to the mobile client.
+- A kanban board, a member list or a graph for waves. Room chat comes first.
+- Owning wave or room state. The wave daemon owns it.
+- A plugin system.
+- Sending these changes upstream.
+
+* Domain Model Glossary
+** Actors
+A person's long-lived agents and how the sidebar shows them.
+
+- Actor :: A pinned thread. Pinning a thread makes it an actor, and unpinning it ends that.
+  /Avoid/: seat, agent, persona
+- Dock :: The grid of pictures at the top of the sidebar that shows every actor.
+  /Avoid/: tray, bar, favourites
+- Picture :: What stands for an actor in the dock: one or two characters on a colour, or an image.
+  /Avoid/: icon, avatar
+
+** Waves
+Work that the wave daemon runs and this fork only displays.
+
+- Wave daemon :: The separate process that starts waves and owns their rooms.
+  /Avoid/: orchestrator, swarm server
+- Wave :: A named group of worker threads started together through the wave daemon to reach one goal.
+  /Avoid/: swarm, batch, team
+- Room :: The shared conversation of a wave, which every worker and the person can read and post to. A room is not a thread and no agent lives in it.
+  /Avoid/: channel thread, board, chat
+
+** Upkeep
+- Seam :: A place where the fork edits a file that upstream owns.
+  /Avoid/: patch, hook
+
+* Invariants and Hard Constraints
+These are rules the fork imposes on itself. None is proven by a build yet.
+
+- The dock shows at most 20 actors. The limit is asserted where the dock is built.
+- Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
+- New behaviour goes in new files. A seam is a mount point or a single branch, never a rewrite.
+- The fork adds no field to upstream's contracts and no database migration.
+- Whatever the fork stores, it stores as files under T3 home that a person can read and edit.
+- The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
+
+** Seams
+None yet.
+
+* Verification Policy
+** Upkeep
+- =main= mirrors upstream and takes no fork commits. The fork lives on =dock=.
+- Upstream is merged into =dock= every week or two. It is merged, not rebased, so a conflict is resolved once.
+- After each merge, record the date, the conflicted files and the minutes spent under [[*What We've Proven]]. Three merges in a row that conflict outside the listed seams mean the design is wrong and gets smaller.
+
+** Verification and Acceptance
+Upstream's checks apply unchanged: =vp run check:changed= before a commit, and upstream's tests for any file the fork touches.
+
+* Live Work
+** TODO Prove the dock
+The first thing to prove. Done means all of the following work in a dev run:
+
+- Pinned threads show as pictures in the dock, in every project, in pin order.
+- Clicking a picture opens that thread's ordinary chat page.
+- The thread menu has an item that sets the picture from characters or from an image file.
+- An agent can pin its own thread and set its own picture through a tool.
+- The mobile client still lists the same threads as pinned.
+
+Sketch, unproven:
+
+- Membership and order :: upstream's pin and pin order. No new state.
+- Picture store :: one small file per actor under T3 home, named by thread ID, with the image beside it. One file per actor so that two writers never share a file.
+- Agent tool :: one new tool beside the existing thread tools that writes this thread's picture file. Pinning already has a tool.
+- Seams expected :: the sidebar component (mount the dock, hide the pinned rows it replaces), the thread menu (one item), the tool registration list (one line).
+
+** TODO Merge upstream once
+Do this as soon as the dock works, before anything else is built on it. Record the result.
+
+** TODO Show waves
+Blocked on the wave daemon being able to start workers as T3 Code threads, which is work in the wave daemon's repository.
+
+- The sidebar lists running waves below the threads: actors, then threads, then waves.
+- A wave's room opens as a tab in the right panel.
+- The thread that started a wave lists it in its related-threads control, next to "Previous agents".
+- A person can post to the room from that tab.
+
+* Open Questions
+- How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? Decides: the owner, after using the dock.
+- Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
+- How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
+- What should the dock show for an actor whose thread is working, waiting on approval or failed? Decides: the maintainer, in the dock build.
+- Does typing =/clear= in the composer start a new provider session under the same thread? Decides: a test.
+- What happens when a terminal and T3 Code have the same Claude Code session open? Decides: a test.
+
+* What We've Proven
+Results so far come from reading upstream's source at commit =983654b3b2= on 2026-11-17. Nothing has been built.
+
+- Pinning already blocks auto-settle. :: =grep -n "pinnedAt != null" apps/server/src/orchestration-v2/ThreadSettlementService.ts=
+- An agent can already pin its own thread. :: =grep -n '"pin"' apps/server/src/mcp/toolkits/thread/tools.ts=
+- A thread has no picture field in the contracts. :: =grep -n -i "icon\|emoji\|avatar" packages/contracts/src/orchestrationV2.ts= returns only tool activity icons.
+- The right panel takes a typed list of tab kinds, and a side chat is one. :: =grep -n 'kind: "side-chat"' apps/web/src/rightPanelStore.ts=
+- "Previous agents" is one section in one component. :: =grep -n '"Previous agents"' apps/web/src/components/chat/ThreadRelationshipsControl.tsx=
+- The thread menu in the sidebar is one handler. :: =grep -n "handleThreadContextMenu = " apps/web/src/components/Sidebar.tsx=
+- The Claude Code session ID is chosen by T3 Code and reused on every turn. :: =grep -n "resume: input.nativeThreadId" apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts=
+- A dev run from the main checkout keeps its state apart from the installed app. :: See "Dev servers" in =AGENTS.md= and =docs/operations/development.md=.
