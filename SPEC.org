@@ -17,7 +17,7 @@ The fork stays small enough to merge upstream every week or two without dread. E
 - Rebuilding the provider integration to get either of these is the wrong trade. Upstream already runs each provider's own runtime and tracks its changes.
 
 ** Outcome
-- Pinned threads are shown as a dock of pictures at the top of the sidebar, in every project.
+- Actors are shown as a dock of pictures at the top of the sidebar, whatever project filter is set.
 - A person sets a thread's picture from its menu. An agent can pin its own thread and set its own picture.
 - Running waves are listed in the sidebar. A wave's room opens as a tab in the right panel, from the sidebar or from the thread that started the wave.
 - The stock mobile client keeps working with no change.
@@ -26,6 +26,7 @@ The fork stays small enough to merge upstream every week or two without dread. E
 - Changing how any provider is run, resumed, compacted or forked.
 - Changing upstream's subagents, side chats or delegate tool. They stay where upstream shows them.
 - A separate "actor" record. An actor is a pinned thread and nothing more.
+- Changing what pinning, snoozing, settling or archiving do.
 - Changes to the mobile client.
 - A kanban board, a member list or a graph for waves. Room chat comes first.
 - Owning wave or room state. The wave daemon owns it.
@@ -36,12 +37,14 @@ The fork stays small enough to merge upstream every week or two without dread. E
 ** Actors
 A person's long-lived agents and how the sidebar shows them.
 
-- Actor :: A pinned thread. Pinning a thread makes it an actor, and unpinning it ends that.
+- Actor :: A thread that upstream lists as pinned: pinned, and neither snoozed nor archived. Pinning a thread makes it an actor. Unpinning it, or settling it, which upstream treats as unpinning, ends that.
   /Avoid/: seat, agent, persona
-- Dock :: The grid of pictures at the top of the sidebar that shows every actor.
+- Dock :: The grid of pictures at the top of the sidebar that stands in for upstream's pinned section.
   /Avoid/: tray, bar, favourites
 - Picture :: What stands for an actor in the dock: one or two characters on a colour, or an image.
   /Avoid/: icon, avatar
+- Picture record :: The file that holds one thread's picture. It belongs to the thread, not to its being pinned, so it survives an unpin.
+  /Avoid/: actor file, profile
 
 ** Waves
 Work that the wave daemon runs and this fork only displays.
@@ -60,15 +63,21 @@ Work that the wave daemon runs and this fork only displays.
 * Invariants and Hard Constraints
 These are rules the fork imposes on itself. None is proven by a build yet.
 
-- The dock shows at most 20 actors. The limit is asserted where the dock is built.
+- The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error.
+- The dock ignores the sidebar's project filter. Everything else about which threads count as pinned follows upstream.
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
-- New behaviour goes in new files. A seam is a mount point or a single branch, never a rewrite.
+- New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
 - The fork adds no field to upstream's contracts and no database migration.
-- Whatever the fork stores, it stores as files under T3 home that a person can read and edit.
+- Whatever the fork stores, it stores as files a person can read and edit, in the environment's state directory beside upstream's database. A dev run and the installed app therefore never share fork state.
+- A picture is served by the environment that owns the thread.
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-None yet.
+None yet. The first build expects these and must list what it actually touches:
+
+- the sidebar component, to mount the dock and stop drawing the pinned rows it replaces
+- the thread action menu's item list and its two click handlers, one for the sidebar and one for the open thread's header
+- the server's route wiring, for reading and writing pictures
 
 * Verification Policy
 ** Upkeep
@@ -83,18 +92,34 @@ Upstream's checks apply unchanged: =vp run check:changed= before a commit, and u
 ** TODO Prove the dock
 The first thing to prove. Done means all of the following work in a dev run:
 
-- Pinned threads show as pictures in the dock, in every project, in pin order.
-- Clicking a picture opens that thread's ordinary chat page.
-- The thread menu has an item that sets the picture from characters or from an image file.
-- An agent can pin its own thread and set its own picture through a tool.
+- Actors show as pictures in the dock, in pin order, with any project filter set.
+- An actor with no picture record shows the first two letters of its title on a colour derived from its thread ID.
+- Clicking a picture opens that thread's ordinary chat page, and the open actor is marked in the dock.
+- Hovering a picture shows the thread's title.
+- The thread menu has an item, on pinned and unpinned threads alike, that opens a small dialog to set the picture from characters and a colour or from an image file, or to clear it.
+- A right-click on a picture opens the same thread menu the pinned row had.
+- A 21st actor is reachable through the overflow entry.
+- An agent can pin its own thread and set its own picture.
+- With no actors, the dock draws nothing.
 - The mobile client still lists the same threads as pinned.
 
 Sketch, unproven:
 
 - Membership and order :: upstream's pin and pin order. No new state.
-- Picture store :: one small file per actor under T3 home, named by thread ID, with the image beside it. One file per actor so that two writers never share a file.
-- Agent tool :: one new tool beside the existing thread tools that writes this thread's picture file. Pinning already has a tool.
-- Seams expected :: the sidebar component (mount the dock, hide the pinned rows it replaces), the thread menu (one item), the tool registration list (one line).
+- Picture store :: one picture record per thread in an =actors= folder under the state directory, with the image beside it. One file per thread so that two writers never share a file. The file name is the thread ID with every character outside =[A-Za-z0-9._-]= percent-encoded; a thread ID is an unrestricted string upstream, so it is never used as a path as it stands.
+- Reading and writing :: the web client cannot read files, so the server serves the records and images and accepts writes over its own routes, with the same authentication as upstream's other asset routes. A read-only client cannot change a picture.
+- Bad input :: a record that does not parse, or whose image is missing, falls back to the default picture and is left on disk untouched.
+
+To settle during the build, each recorded here when it is:
+
+- how the client learns that an agent or a hand edit changed a picture
+- allowed image formats, the size limit, and how an image is cropped to a square
+- what "one or two characters" counts, given emoji
+- the dock's columns and rows, and whether it stays fixed while the thread list scrolls
+- what the dock shows for an actor that is working, waiting on approval, failed or unread
+- which pinned-row gestures the dock keeps: drag to reorder, drag out to unpin, dropping a file to attach it, keyboard movement
+- whether deleting a thread deletes its picture record
+- how an agent sets its picture. A new tool costs three upstream files, one of them a byte budget that every upstream tool change also edits, so it would conflict often. The alternative is that the agent writes its picture record directly.
 
 ** TODO Merge upstream once
 Do this as soon as the dock works, before anything else is built on it. Record the result.
@@ -109,20 +134,24 @@ Blocked on the wave daemon being able to start workers as T3 Code threads, which
 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? Decides: the owner, after using the dock.
+- Does pinning really stop auto-settle? The code says so and upstream's user guide says the opposite; see [[*What We've Proven]]. Decides: a test. If it does not, the dock also sets upstream's per-thread switch that turns auto-settle off.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
+- When a person is connected to several environments, does the dock show actors from all of them? Decides: the owner. The first build shows what upstream's pinned list shows.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
-- What should the dock show for an actor whose thread is working, waiting on approval or failed? Decides: the maintainer, in the dock build.
 - Does typing =/clear= in the composer start a new provider session under the same thread? Decides: a test.
 - What happens when a terminal and T3 Code have the same Claude Code session open? Decides: a test.
 
 * What We've Proven
-Results so far come from reading upstream's source at commit =983654b3b2= on 2026-11-17. Nothing has been built.
+Results so far come from reading upstream's source at commit =983654b3b2= on 2026-11-17, and from a cold read of this spec by a second model the same day. Nothing has been built.
 
-- Pinning already blocks auto-settle. :: =grep -n "pinnedAt != null" apps/server/src/orchestration-v2/ThreadSettlementService.ts=
+- The code exempts pinned threads from auto-settle, and both auto-settle paths go through that check. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is a month older than the code. Not yet tested. :: =grep -n "isAutoSettlementCandidate\|pinnedAt != null" apps/server/src/orchestration-v2/ThreadSettlementService.ts= and =grep -n "does not prevent" docs/user/thread-sidebar.md=
+- Settling a thread clears its pin. Snoozing and archiving keep the pin but drop the thread from the pinned list. :: =grep -n "pinnedAt: null" apps/server/src/orchestration-v2/Orchestrator.ts=
+- The pinned list is filtered by the project filter on web. :: =grep -n "scopedProjectKeys" apps/web/src/components/Sidebar.logic.ts=
 - An agent can already pin its own thread. :: =grep -n '"pin"' apps/server/src/mcp/toolkits/thread/tools.ts=
 - A thread has no picture field in the contracts. :: =grep -n -i "icon\|emoji\|avatar" packages/contracts/src/orchestrationV2.ts= returns only tool activity icons.
+- A dev run from the main checkout keeps its state directory apart from the installed app's, inside the same T3 home. :: =grep -n '"dev" : "userdata"' apps/server/src/config.ts=
+- Thread menu items are built in one place and handled in two. :: =grep -n "buildThreadActionMenuItems" apps/web/src/components/threadActionMenu.logic.ts apps/web/src/components/Sidebar.tsx apps/web/src/hooks/useThreadActionMenu.ts=
+- Adding an agent tool changes the tool list's byte budget, which a test pins. :: =grep -n "mcpToolListJsonBytes" apps/server/src/provider/agentContextBudget.json=
 - The right panel takes a typed list of tab kinds, and a side chat is one. :: =grep -n 'kind: "side-chat"' apps/web/src/rightPanelStore.ts=
 - "Previous agents" is one section in one component. :: =grep -n '"Previous agents"' apps/web/src/components/chat/ThreadRelationshipsControl.tsx=
-- The thread menu in the sidebar is one handler. :: =grep -n "handleThreadContextMenu = " apps/web/src/components/Sidebar.tsx=
-- The Claude Code session ID is chosen by T3 Code and reused on every turn. :: =grep -n "resume: input.nativeThreadId" apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts=
-- A dev run from the main checkout keeps its state apart from the installed app. :: See "Dev servers" in =AGENTS.md= and =docs/operations/development.md=.
+- T3 Code chooses the Claude Code session ID. It passes it as the new session's ID on the first turn and resumes that ID on later turns. Rolling a thread back to its start allocates a new one under the same thread, and a fork gets its own. :: =grep -n "resume: input.nativeThreadId\|sessionId: input.nativeThreadId\|allocateSessionId" apps/server/src/orchestration-v2/Adapters/ClaudeAdapterV2.ts=
