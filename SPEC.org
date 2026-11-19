@@ -41,10 +41,12 @@ A person's long-lived agents and how the sidebar shows them.
   /Avoid/: seat, agent, persona
 - Dock :: The grid of pictures at the top of the sidebar that stands in for upstream's pinned section.
   /Avoid/: tray, bar, favourites
-- Picture :: What stands for an actor in the dock: one or two characters on a colour, or an image.
+- Picture :: What stands for an actor in the dock: one or two characters on a colour, or an image. Every picture is an SVG image, whichever of the two it shows.
   /Avoid/: icon, avatar
-- Picture record :: The file that holds one thread's picture. It belongs to the thread, not to its being pinned, so it survives an unpin.
-  /Avoid/: actor file, profile
+- Picture file :: The SVG file that holds one thread's picture. It belongs to the thread, not to its being pinned, so it survives an unpin.
+  /Avoid/: picture record, actor file, profile
+- Default picture :: What the dock draws for an actor that has no picture file: a monogram of its title, derived the way upstream derives a project's, on a colour derived from its thread ID.
+  /Avoid/: placeholder, fallback icon
 
 ** Waves
 Work that the wave daemon runs and this fork only displays.
@@ -61,23 +63,36 @@ Work that the wave daemon runs and this fork only displays.
   /Avoid/: patch, hook
 
 * Invariants and Hard Constraints
-These are rules the fork imposes on itself. None is proven by a build yet.
+These are rules the fork imposes on itself. Each says how it is checked; one with no check named is held by review only.
 
-- The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error.
-- The dock ignores the sidebar's project filter, so it shows actors from every connected environment. Everything else about which threads count as pinned follows upstream.
+- The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error. Checked by =splitActorDock= tests.
+- The open actor always has a place in the dock. When it would overflow, it takes the last place. Checked by =splitActorDock= tests.
+- The dock ignores the sidebar's project filter, so it shows actors from every connected environment. Everything else about which threads count as pinned follows upstream, by calling upstream's own functions. Checked by =selectActors= tests.
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
 - New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
 - The fork adds no field to upstream's contracts and no database migration.
 - Whatever the fork stores, it stores as files a person can read and edit, in the environment's state directory beside upstream's database. A dev run and the installed app therefore never share fork state.
+- A picture file sits in the state directory's =actors= folder. It is named after its thread ID with every character outside =[A-Za-z0-9._-]= percent-encoded, plus =.svg=. A thread ID is an unrestricted string upstream, so it is never used as a path as it stands. Checked by =actorPictureFileName= tests.
+- A picture is at most 128 KiB. One read returns at most 24 pictures. The picture folder holds at most 4096 files; a write that would add one more is refused.
+- A picture is only ever shown through an image element, which runs no script and loads nothing the picture points at. The server therefore stores any SVG and sanitises none.
+- A picture file that is not a usable SVG reads as absent and is left on disk untouched. Checked by a server test.
 - A picture is served by the environment that owns the thread.
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-None yet. The first build expects these and must list what it actually touches:
+Seven upstream files, 28 lines added and 1 changed, as of the first build. Measure with =git diff --numstat <upstream>..dock= and leave out the fork's own files.
 
-- the sidebar component, to mount the dock and stop drawing the pinned rows it replaces
-- the thread action menu's item list and its two click handlers, one for the sidebar and one for the open thread's header
-- the server's route wiring, for reading and writing pictures
+| File | What the fork adds |
+|------+--------------------|
+| =apps/web/src/components/Sidebar.tsx= | two imports, the dock's mount, one line that stops drawing pinned rows, one menu case |
+| =apps/web/src/components/threadActionMenu.logic.ts= | the menu item's ID and its entry |
+| =apps/web/src/components/threadActionMenu.logic.test.ts= | the item in two expected lists |
+| =apps/web/src/hooks/useThreadActionMenu.ts= | one import and one menu case |
+| =apps/web/src/contextMenuFallback.ts= | one icon at the end of the icon table |
+| =apps/web/src/routes/__root.tsx= | one import and the picture dialog's host |
+| =apps/server/src/server.ts= | one import and one entry in the route list |
+
+The fork's own files are =apps/web/src/actors/=, =apps/server/src/actors/=, =scripts/scenarios/pinned-thread-joins-actor-dock.e2e.ts= and this spec.
 
 * Verification Policy
 ** Upkeep
@@ -89,40 +104,26 @@ None yet. The first build expects these and must list what it actually touches:
 Upstream's checks apply unchanged: =vp run check:changed= before a commit, and upstream's tests for any file the fork touches.
 
 * Live Work
-** TODO Prove the dock
-The first thing to prove. Done means all of the following work in a dev run:
+** TODO Finish proving the dock
+The first build works in the real app; see [[*What We've Proven]]. These parts of it are built and not yet seen working there:
 
-- Actors show as pictures in the dock, in pin order, with any project filter set.
-- An actor with no picture record shows the first two letters of its title on a colour derived from its thread ID.
-- Clicking a picture opens that thread's ordinary chat page, and the open actor is marked in the dock.
-- Hovering a picture shows the thread's title.
-- The thread menu has an item, on pinned and unpinned threads alike, that opens a small dialog to set the picture from characters and a colour or from an image file, or to clear it.
-- A right-click on a picture opens the same thread menu the pinned row had.
-- A 21st actor is reachable through the overflow entry.
-- An agent can pin its own thread and set its own picture.
-- With no actors, the dock draws nothing.
-- The mobile client still lists the same threads as pinned.
+- A 21st actor reached through the overflow entry. The split is unit-tested; the entry has never been opened in the app.
+- The dock with a project filter set, and with a second environment connected.
+- The tooltip that shows an actor's title and status, and the status dot.
+- Setting a picture from an image file. Only letters on a colour has been run.
+- The mobile client still listing the same threads as pinned. The fork changes no contract and no table, so it should; it has not been run.
 
-Sketch, unproven:
+Known gaps, each a decision the build made to stay small:
 
-- Membership and order :: upstream's pin and pin order. No new state.
-- Picture store :: one picture record per thread in an =actors= folder under the state directory, with the image beside it. One file per thread so that two writers never share a file. The file name is the thread ID with every character outside =[A-Za-z0-9._-]= percent-encoded; a thread ID is an unrestricted string upstream, so it is never used as a path as it stands.
-- Reading and writing :: the web client cannot read files, so the server serves the records and images and accepts writes over its own routes, with the same authentication as upstream's other asset routes. A read-only client cannot change a picture.
-- Bad input :: a record that does not parse, or whose image is missing, falls back to the default picture and is left on disk untouched.
-
-To settle during the build, each recorded here when it is:
-
-- how the client learns that an agent or a hand edit changed a picture
-- allowed image formats, the size limit, and how an image is cropped to a square
-- what "one or two characters" counts, given emoji
-- the dock's columns and rows, and whether it stays fixed while the thread list scrolls
-- what the dock shows for an actor that is working, waiting on approval, failed or unread
-- which pinned-row gestures the dock keeps: drag to reorder, drag out to unpin, dropping a file to attach it, keyboard movement
-- whether deleting a thread deletes its picture record
-- how an agent sets its picture. A new tool costs three upstream files, one of them a byte budget that every upstream tool change also edits, so it would conflict often. The alternative is that the agent writes its picture record directly.
+- Pin order cannot be changed in the fork. Upstream reorders by dragging pinned rows, and the dock replaced those rows. The order is upstream's pin order.
+- Renaming from a picture's menu opens the thread, where the header renames it. The dock has no title to edit in place.
+- Sharing with a guest is missing from a picture's menu. It is still in the open thread's header menu.
+- A change an agent makes to its picture file shows when the window next gains focus or the set of actors changes, not at once.
+- Deleting a thread leaves its picture file behind. The folder's cap bounds the cost.
+- An agent sets its picture by writing its picture file. There is no tool for it: a new tool costs three upstream files, one of them a byte budget every upstream tool change also edits.
 
 ** TODO Merge upstream once
-Do this as soon as the dock works, before anything else is built on it. Record the result.
+Do this before anything else is built on the dock. Record the result.
 
 ** TODO Show waves
 Blocked on the wave daemon being able to start workers as T3 Code threads, which is work in the wave daemon's repository.
@@ -132,9 +133,11 @@ Blocked on the wave daemon being able to start workers as T3 Code threads, which
 - The thread that started a wave lists it in its related-threads control, next to "Previous agents".
 - A person can post to the room from that tab.
 
+Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads launched together in a collapsible group in the sidebar. It has no shared room. Read it before choosing how waves are listed, since it may land first.
+
 * Open Questions
-- How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? Decides: the owner, after using the dock.
-- Does pinning really stop auto-settle? The code says so and upstream's user guide says the opposite; see [[*What We've Proven]]. Decides: a test. If it does not, the dock also sets upstream's per-thread switch that turns auto-settle off.
+- How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
+- How is pin order changed now that the pinned rows are gone: dragging pictures, or a list in the overflow menu? Decides: the owner, after using the dock.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
 - What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
@@ -142,9 +145,21 @@ Blocked on the wave daemon being able to start workers as T3 Code threads, which
 - What happens when a terminal and T3 Code have the same Claude Code session open? Decides: a test.
 
 * What We've Proven
-Results so far come from reading upstream's source at commit =983654b3b2= on 2026-11-17, and from a cold read of this spec by a second model the same day. Nothing has been built.
+Results come from three places: reading upstream's source at commit =983654b3b2=, running upstream's and the fork's tests, and a scenario that drives the real app in a browser. Each line says which.
 
-- The code exempts pinned threads from auto-settle, and both auto-settle paths go through that check. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is a month older than the code. Not yet tested. :: =grep -n "isAutoSettlementCandidate\|pinnedAt != null" apps/server/src/orchestration-v2/ThreadSettlementService.ts= and =grep -n "does not prevent" docs/user/thread-sidebar.md=
+** The build, 2026-11-19
+- The dock works in the real app. One scenario pins a thread from its menu and sees its picture appear; sets the picture from the dialog and finds the SVG on disk under the encoded thread ID; overwrites that file as an agent would and sees the new picture after the window gains focus; opens another thread and returns by the picture; and opens the thread menu from the picture. :: =cd scripts && pnpm exec e2e run scenarios/pinned-thread-joins-actor-dock.e2e.ts=
+- With no actors the dock draws nothing. :: the same scenario, before the pin
+- Upstream's sidebar browser tests pass with the pinned rows gone: 38 tests in 7 files. :: =cd apps/web && pnpm exec vp test run --project browser src/components/Sidebar*.browser.test.* src/components/sidebar/routeReveal.browser.test.tsx=
+- Upstream's checks pass on the fork's change: format, lint, unused exports, type-check of 42 packages, the tests beside the changed files, and React Compiler coverage. :: =pnpm exec vp run check:changed=
+- Pinning stops auto-settle. Upstream's own test builds an old pinned thread with a finished run and asserts it is not among the threads auto-settle would take. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is older than the code and is wrong. :: =cd apps/server && pnpm exec vp test run src/orchestration-v2/ProjectionSettlement.test.ts= and =grep -n '"pinned", { pinnedAt: old }' apps/server/src/orchestration-v2/ProjectionSettlement.test.ts=
+- A raw route can authenticate on every kind of connection without touching contracts, by the helper upstream's device and preview routes use. Read in the source and run on a local connection only. :: =grep -n "authenticateMediaRequest" apps/server/src/auth/http.ts apps/server/src/actors/ActorPictures.ts=
+
+** Prior art, 2026-11-18
+- Nobody has shipped a picture on an ordinary thread. The nearest work is a grid of pinned threads as title tiles, =pingdotgg/t3code#30550=, closed unmerged on 2026-11-12. It edits upstream's sidebar files in place, and two of its eight files no longer apply to upstream two weeks later. :: =gh pr diff 30550 -R pingdotgg/t3code | git apply --check --3way=
+- Upstream changes its sidebar constantly: 81 commits to =Sidebar.tsx= and 43 to the thread row file in the month before the base commit, against 13 to the two thread menu files. :: =git log --oneline --since=2026-10-18 983654b3b2 -- apps/web/src/components/Sidebar.tsx | wc -l=
+
+** Reading upstream's source, 2026-11-17
 - Settling a thread clears its pin. Snoozing and archiving keep the pin but drop the thread from the pinned list. :: =grep -n "pinnedAt: null" apps/server/src/orchestration-v2/Orchestrator.ts=
 - The pinned list is filtered by the project filter on web. :: =grep -n "scopedProjectKeys" apps/web/src/components/Sidebar.logic.ts=
 - The sidebar's thread list already holds threads from every connected environment, each carrying its environment's ID, and the project filter is the only thing that narrows it. With no filter, the pinned list spans environments. Not yet tested with two environments. :: =grep -n "scopedProjectKeys === null" -B8 apps/web/src/components/Sidebar.logic.ts= and =grep -n "useQuietThreadShells" apps/web/src/components/Sidebar.tsx=
