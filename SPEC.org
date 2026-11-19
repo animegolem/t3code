@@ -64,7 +64,7 @@ Work that the wave daemon runs and this fork only displays.
 These are rules the fork imposes on itself. None is proven by a build yet.
 
 - The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error.
-- The dock ignores the sidebar's project filter. Everything else about which threads count as pinned follows upstream.
+- The dock ignores the sidebar's project filter, so it shows actors from every connected environment. Everything else about which threads count as pinned follows upstream.
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
 - New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
 - The fork adds no field to upstream's contracts and no database migration.
@@ -136,7 +136,7 @@ Blocked on the wave daemon being able to start workers as T3 Code threads, which
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? Decides: the owner, after using the dock.
 - Does pinning really stop auto-settle? The code says so and upstream's user guide says the opposite; see [[*What We've Proven]]. Decides: a test. If it does not, the dock also sets upstream's per-thread switch that turns auto-settle off.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
-- When a person is connected to several environments, does the dock show actors from all of them? Decides: the owner. The first build shows what upstream's pinned list shows.
+- What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
 - Does typing =/clear= in the composer start a new provider session under the same thread? Decides: a test.
 - What happens when a terminal and T3 Code have the same Claude Code session open? Decides: a test.
@@ -147,6 +147,7 @@ Results so far come from reading upstream's source at commit =983654b3b2= on 202
 - The code exempts pinned threads from auto-settle, and both auto-settle paths go through that check. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is a month older than the code. Not yet tested. :: =grep -n "isAutoSettlementCandidate\|pinnedAt != null" apps/server/src/orchestration-v2/ThreadSettlementService.ts= and =grep -n "does not prevent" docs/user/thread-sidebar.md=
 - Settling a thread clears its pin. Snoozing and archiving keep the pin but drop the thread from the pinned list. :: =grep -n "pinnedAt: null" apps/server/src/orchestration-v2/Orchestrator.ts=
 - The pinned list is filtered by the project filter on web. :: =grep -n "scopedProjectKeys" apps/web/src/components/Sidebar.logic.ts=
+- The sidebar's thread list already holds threads from every connected environment, each carrying its environment's ID, and the project filter is the only thing that narrows it. With no filter, the pinned list spans environments. Not yet tested with two environments. :: =grep -n "scopedProjectKeys === null" -B8 apps/web/src/components/Sidebar.logic.ts= and =grep -n "useQuietThreadShells" apps/web/src/components/Sidebar.tsx=
 - An agent can already pin its own thread. :: =grep -n '"pin"' apps/server/src/mcp/toolkits/thread/tools.ts=
 - A thread has no picture field in the contracts. :: =grep -n -i "icon\|emoji\|avatar" packages/contracts/src/orchestrationV2.ts= returns only tool activity icons.
 - A dev run from the main checkout keeps its state directory apart from the installed app's, inside the same T3 home. :: =grep -n '"dev" : "userdata"' apps/server/src/config.ts=
