@@ -68,6 +68,8 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error. Checked by =splitActorDock= tests.
 - The open actor always has a place in the dock. When it would overflow, it takes the last place. Checked by =splitActorDock= tests.
 - The dock ignores the sidebar's project filter, so it shows actors from every connected environment. Everything else about which threads count as pinned follows upstream, by calling upstream's own functions. Checked by =selectActors= tests.
+- The dock's order is upstream's pin order. The fork stores no order of its own: dragging a picture writes upstream's pin order keys, chosen by upstream's own planner and sent by upstream's own command, so stock T3 Code shows the same order. Checked by =planActorMove= tests and the drag scenario.
+- A dropped order shows at once and is held on screen until four seconds after its writes finish. While the writes are in flight no picture can be dragged, so two drops never plan against the same keys. A failed write releases the hold and says so.
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
 - New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
 - The fork adds no field to upstream's contracts and no database migration.
@@ -116,7 +118,10 @@ The first build works in the real app; see [[*What We've Proven]]. These parts o
 
 Known gaps, each a decision the build made to stay small:
 
-- Pin order cannot be changed in the fork. Upstream reorders by dragging pinned rows, and the dock replaced those rows. The order is upstream's pin order.
+- A picture cannot be dragged between the dock and the overflow list. With more than 20 actors, the only way to bring a later one into the dock is to unpin and pin it again, which puts it first.
+- Pictures are reordered with a pointer only. There is no keyboard way, and a drag by touch has not been tried.
+- The first drag among actors that have never been reordered writes an order key to every actor, one request each. Later drags write one key.
+- If the server takes longer than four seconds after a write to report the new order, the dock shows the old order until it does.
 - Renaming from a picture's menu opens the thread, where the header renames it. The dock has no title to edit in place.
 - Sharing with a guest is missing from a picture's menu. It is still in the open thread's header menu.
 - A change an agent makes to its picture file shows when the window next gains focus or the set of actors changes, not at once.
@@ -138,7 +143,6 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
-- How is pin order changed now that the pinned rows are gone: dragging pictures, or a list in the overflow menu? Decides: the owner, after using the dock.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
 - What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
@@ -151,6 +155,8 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 ** The build, 2026-11-19
 - The dock works in the real app. One scenario pins a thread from its menu and sees its picture appear; sets the picture from the dialog and finds the SVG on disk under the encoded thread ID; overwrites that file as an agent would and sees the new picture after the window gains focus; opens another thread and returns by the picture; and opens the thread menu from the picture. :: =cd scripts && pnpm exec e2e run scenarios/pinned-thread-joins-actor-dock.e2e.ts=
 - With no actors the dock draws nothing. :: the same scenario, before the pin
+- Dragging a picture changes the pin order and the server keeps it. A second scenario pins three threads, drags the last picture to the front, and sees the new order at once and again after the dock has stopped holding it. Letting go does not open the dragged thread. A second drag, planned from the saved order, also holds. The owner chose dragging on 2026-11-19 after using the dock. :: =cd scripts && pnpm exec e2e run scenarios/dragged-actor-keeps-its-new-place.e2e.ts=
+- The "Working" section in the sidebar is upstream's, not the fork's. It arrived in =b33eda1399= and became the default in =3de45c6254=. Each client keeps its own setting, so a dev run shows it even where the installed app has it switched off. :: =git log -S'sidebarWorkingShelfEnabled' --oneline -- packages/contracts/src/settings.ts=
 - Opening an actor from outside the project filter leaves the filter as it was set. Before the fix the same step failed: upstream's sidebar clears the filter to reveal the open thread's row, and a thread the dock draws has no row, so the filter was cleared for good. :: the same scenario, the step after the filter is chosen
 - A snoozed actor returns to the dock in the minute its snooze ends. The minute clock is not an instant the snooze check can use as it stands; the dock converts it. :: =cd apps/web && pnpm exec vp test run --project unit src/actors=
 - Upstream's sidebar browser tests pass with the pinned rows gone: 38 tests in 7 files. :: =cd apps/web && pnpm exec vp test run --project browser src/components/Sidebar*.browser.test.* src/components/sidebar/routeReveal.browser.test.tsx=

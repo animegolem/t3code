@@ -3,6 +3,7 @@ import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 
 import {
   filterSidebarV2VisibleThreads,
+  planSidebarThreadDrop,
   resolveSidebarThreadSection,
   sortPinnedThreadsForSidebar,
 } from "../components/Sidebar.logic";
@@ -155,4 +156,52 @@ export function splitActorDock<T>(
   if (active !== undefined) shown.push(active);
   if (displaced !== undefined) overflow.unshift(displaced);
   return { shown, overflow };
+}
+
+/**
+ * The pin order after `movedKey` takes `targetKey`'s place, with the order keys to write for it.
+ * Upstream's planner picks the keys, so stock T3 Code shows the same order. Null when nothing can move.
+ */
+export function planActorMove(input: {
+  /** Every actor's key, in the order the dock shows them. */
+  readonly order: readonly string[];
+  readonly movedKey: string;
+  readonly targetKey: string;
+  /** Every thread's pin order key, so a key held by a pinned thread outside the dock is never reused. */
+  readonly pinOrderKeys: ReadonlyMap<string, string | null | undefined>;
+  /** The actors whose environment can take a write now. */
+  readonly writableKeys: ReadonlySet<string>;
+}): {
+  readonly order: readonly string[];
+  readonly assignments: ReadonlyArray<{ readonly id: string; readonly orderKey: string }>;
+} | null {
+  const { order, movedKey } = input;
+  const to = order.indexOf(input.targetKey);
+  if (to === -1 || !order.includes(movedKey) || input.targetKey === movedKey) return null;
+  const next = order.filter((key) => key !== movedKey);
+  next.splice(to, 0, movedKey);
+  const plan = planSidebarThreadDrop({
+    activeKey: movedKey,
+    activeSection: "pinned",
+    target: { section: "pinned", pinnedOrder: next, activeOrder: [] },
+    pinnedOrder: order,
+    pinnedKeysById: input.pinOrderKeys,
+    reorderableKeys: input.writableKeys,
+    activeOrder: [],
+    activeKeysById: new Map(),
+  });
+  return plan.kind === "reorder-pinned" ? { order: next, assignments: plan.assignments } : null;
+}
+
+/** The actors in a dropped order that the server has not reported yet; any the order does not name keep their place after it. */
+export function holdActorOrder<T>(
+  actors: readonly T[],
+  keyOf: (actor: T) => string,
+  heldOrder: readonly string[],
+): T[] {
+  const place = new Map(heldOrder.map((key, index) => [key, index]));
+  return actors.toSorted(
+    (left, right) =>
+      (place.get(keyOf(left)) ?? heldOrder.length) - (place.get(keyOf(right)) ?? heldOrder.length),
+  );
 }
