@@ -1,3 +1,4 @@
+/* oxlint-disable t3code/no-untranslated-copy -- the fork adds nothing to the translation catalogs, so its copy stays English */
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useRef, useState } from "react";

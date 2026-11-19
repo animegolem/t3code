@@ -1,3 +1,4 @@
+/* oxlint-disable t3code/no-untranslated-copy -- the fork adds nothing to the translation catalogs, so its copy stays English */
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 
 import {
