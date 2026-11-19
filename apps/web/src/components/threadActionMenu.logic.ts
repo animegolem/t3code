@@ -169,7 +169,7 @@ export function buildThreadActionMenuItems(
         ]
       : []),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
-    { id: "set-picture", label: "Set picture…" },
+    { id: "set-picture", label: "Set picture…", icon: "image" },
     ...(state.supports.titleRegeneration
       ? [
           {
