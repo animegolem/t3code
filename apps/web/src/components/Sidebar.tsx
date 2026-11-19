@@ -269,6 +269,7 @@ import {
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
 import { ActorDock } from "../actors/ActorDock";
+import { isInPinnedSection } from "../actors/actorPicture.logic";
 import { openActorPictureDialog } from "../actors/actorPictureDialogState";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
 import {
@@ -1130,7 +1131,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     isSearching: isSearchingThreads,
     scopedProjectKeys: chosenScopeProjectKeys,
     delegatedUnderParent,
-    findThread: (key) => threads.find((candidate) => threadShellKey(candidate) === key),
+    // The dock draws a pinned thread and gives it no row, so opening one reveals nothing and keeps the scope.
+    findThread: (key) =>
+      threads.find(
+        (candidate) =>
+          threadShellKey(candidate) === key &&
+          !isInPinnedSection(
+            candidate,
+            serverConfigs.has(candidate.environmentId),
+            new Date().toISOString(),
+          ),
+      ),
   });
   const projectScopeKeys = revealWidensScope ? [] : chosenProjectScopeKeys;
   const projectScopeKey = projectScopeKeys.length === 0 ? null : projectScopeKeys.join("\n");

@@ -35,6 +35,8 @@ test(
     const project = await t3.project("demo");
     const thread = await t3.thread({ project, title: "Release captain", messages: ["first"] });
     const other = await t3.thread({ project, title: "Scratch notes", messages: ["first"] });
+    const elsewhere = await t3.project("elsewhere");
+    await t3.thread({ project: elsewhere, title: "Side quest", messages: ["first"] });
     await t3.open(thread);
     const tile = screen.getByTestId("actor-tile");
     const actions = screen.getByRole("button", "Thread actions for Release captain");
@@ -81,8 +83,10 @@ test(
     );
     await app.screenshot("picture-written-by-agent");
 
-    // The only row left in the list: the pinned thread has none.
-    await screen.getByTestId("sidebar-row-card").tap();
+    // The pinned thread has no row; the other two threads do.
+    const rows = screen.getByTestId("sidebar-row-card");
+    await expect(rows).toHaveCount(2);
+    await screen.getByRole("button", "Scratch notes, Done, demo").tap();
     await expect(browser).toHaveURL(endsWithThread(other.threadId));
     await expect(tile).not.toHaveAttribute("aria-current", "page");
 
@@ -90,6 +94,17 @@ test(
     await tile.tap();
     await expect(browser).toHaveURL(endsWithThread(thread.threadId));
     await expect(tile).toHaveAttribute("aria-current", "page");
+
+    // Opening an actor from outside the project filter leaves the filter as the person set it.
+    await screen.getByRole("combobox", "Filter threads by project").tap();
+    await screen.getByRole("option", "elsewhere").tap();
+    await expect(rows).toHaveCount(1);
+    await app.screenshot("filtered-to-another-project");
+    await screen.getByRole("button", "Side quest, Done, elsewhere").tap();
+    await tile.tap();
+    await expect(browser).toHaveURL(endsWithThread(thread.threadId));
+    await expect(rows).toHaveCount(1);
+    await app.screenshot("actor-opened-filter-kept");
 
     // A right-click on the picture opens the thread's own menu.
     await browser.evaluate(

@@ -96,6 +96,31 @@ type ActorThread = Parameters<typeof filterSidebarV2VisibleThreads>[0][number] &
     readonly settledOverride?: string | null | undefined;
   };
 
+type PinnedSectionThread = Parameters<typeof effectiveSnoozed>[0] & {
+  readonly pinnedAt?: string | null | undefined;
+  readonly settledOverride?: string | null | undefined;
+};
+
+/** Whether upstream's sidebar would put this thread in its pinned section, where the dock draws it instead of a row. */
+export function isInPinnedSection(
+  thread: PinnedSectionThread,
+  environmentLoaded: boolean,
+  now: string,
+): boolean {
+  return (
+    resolveSidebarThreadSection({
+      snoozed: environmentLoaded && effectiveSnoozed(thread, { now }),
+      settled: environmentLoaded && thread.settledOverride === "settled",
+      pinned: thread.pinnedAt != null,
+    }) === "pinned"
+  );
+}
+
+/** The minute clock is a UTC timestamp cut off after the minutes; this is the instant that minute began. */
+export function minuteStart(nowMinute: string): string {
+  return `${nowMinute}:00.000Z`;
+}
+
 /** The threads upstream's sidebar lists as pinned when no project filter is set. */
 export function selectActors<T extends ActorThread>(input: {
   readonly threads: readonly T[];
@@ -107,16 +132,9 @@ export function selectActors<T extends ActorThread>(input: {
     input.threads,
     null,
     input.delegatedUnderParent,
-  ).filter((thread) => {
-    const loaded = input.loadedEnvironmentIds.has(thread.environmentId);
-    return (
-      resolveSidebarThreadSection({
-        snoozed: loaded && effectiveSnoozed(thread, { now: input.now }),
-        settled: loaded && thread.settledOverride === "settled",
-        pinned: thread.pinnedAt != null,
-      }) === "pinned"
-    );
-  });
+  ).filter((thread) =>
+    isInPinnedSection(thread, input.loadedEnvironmentIds.has(thread.environmentId), input.now),
+  );
   return sortPinnedThreadsForSidebar(pinned);
 }
 

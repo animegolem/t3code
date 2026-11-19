@@ -5,6 +5,7 @@ import {
   actorPictureText,
   defaultPictureSvg,
   imagePictureSvg,
+  minuteStart,
   monogramPictureSvg,
   pictureImageUrl,
   selectActors,
@@ -56,6 +57,23 @@ describe("selectActors", () => {
         }),
       ]),
     ).toEqual(["env-b:other-machine", "env-a:pinned", "env-a:woken"]);
+  });
+});
+
+describe("minuteStart", () => {
+  it("turns the minute clock into an instant the snooze check can parse as UTC", () => {
+    expect(new Date(minuteStart("2026-11-19T12:00")).toISOString()).toBe(NOW);
+    // Just after the minute a snooze ends, the thread is an actor again.
+    const waking = [thread("waking", { snoozedUntil: "2026-11-19T12:00:00.000Z" })];
+    const at = (nowMinute: string) =>
+      selectActors({
+        threads: waking as never,
+        delegatedUnderParent: new Set(),
+        loadedEnvironmentIds: new Set(["env-a"]),
+        now: minuteStart(nowMinute),
+      }).length;
+    expect(at("2026-11-19T11:59")).toBe(0);
+    expect(at("2026-11-19T12:00")).toBe(1);
   });
 });
 

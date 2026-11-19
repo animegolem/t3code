@@ -17,6 +17,7 @@ import {
 import { useUiStateStore } from "../uiStateStore";
 import {
   defaultPictureSvg,
+  minuteStart,
   pictureImageUrl,
   selectActors,
   splitActorDock,
@@ -143,7 +144,7 @@ export function ActorDock(props: {
     threads,
     delegatedUnderParent,
     loadedEnvironmentIds: new Set(serverConfigs.keys()),
-    now: nowMinute,
+    now: minuteStart(nowMinute),
   });
   const keyOf = (actor: Actor) => scopedThreadKey(scopeThreadRef(actor.environmentId, actor.id));
   const actorRefsKey = JSON.stringify(
