@@ -71,6 +71,7 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
 - New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
 - The fork adds no field to upstream's contracts and no database migration.
+- The fork's own text is English only. It adds nothing to upstream's translation catalogs, which are generated files that every upstream text change rewrites. Each of its files that holds text says so in a lint comment at its top.
 - Whatever the fork stores, it stores as files a person can read and edit, in the environment's state directory beside upstream's database. A dev run and the installed app therefore never share fork state.
 - A picture file sits in the state directory's =actors= folder. It is named after its thread ID with every character outside =[A-Za-z0-9._-]= percent-encoded, plus =.svg=. A thread ID is an unrestricted string upstream, so it is never used as a path as it stands. Checked by =actorPictureFileName= tests.
 - A picture is at most 128 KiB. One read returns at most 24 pictures. The picture folder holds at most 4096 files; a write that would add one more is refused.
@@ -80,12 +81,12 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-Seven upstream files, 40 lines added and 2 changed, as of the first build. Measure with =git diff --numstat <upstream>..dock= and leave out the fork's own files.
+Seven upstream files, 41 lines added and 2 changed, as of the first upstream merge. Measure with =git diff --numstat upstream/main..dock= and leave out the fork's own files.
 
 | File | What the fork adds |
 |------+--------------------|
 | =apps/web/src/components/Sidebar.tsx= | three imports, the dock's mount, one line that stops drawing pinned rows, one menu case, one condition that keeps the row reveal from clearing the project filter |
-| =apps/web/src/components/threadActionMenu.logic.ts= | the menu item's ID and its entry |
+| =apps/web/src/components/threadActionMenu.logic.ts= | the menu item's ID, its entry, and the lint comment that keeps its label English |
 | =apps/web/src/components/threadActionMenu.logic.test.ts= | the item in two expected lists |
 | =apps/web/src/hooks/useThreadActionMenu.ts= | one import and one menu case |
 | =apps/web/src/contextMenuFallback.ts= | one icon at the end of the icon table |
@@ -125,9 +126,6 @@ Known gaps, each a decision the build made to stay small:
 - Upstream's next and previous thread keys still step through pinned threads, which now have no row to show which one is open. The dock marks it instead.
 - An actor on a machine that runs stock T3 Code shows in the dock with its default picture. That machine has no picture route, so its picture cannot be set from the dialog.
 
-** TODO Merge upstream once
-Do this before anything else is built on the dock. Record the result.
-
 ** TODO Show waves
 Blocked on the wave daemon being able to start workers as T3 Code threads, which is work in the wave daemon's repository.
 
@@ -159,6 +157,11 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 - Upstream's checks pass on the fork's change: format, lint, unused exports, type-check of 42 packages, the tests beside the changed files, and React Compiler coverage. :: =pnpm exec vp run check:changed=
 - Pinning stops auto-settle. Upstream's own test builds an old pinned thread with a finished run and asserts it is not among the threads auto-settle would take. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is older than the code and is wrong. :: =cd apps/server && pnpm exec vp test run src/orchestration-v2/ProjectionSettlement.test.ts= and =grep -n '"pinned", { pinnedAt: old }' apps/server/src/orchestration-v2/ProjectionSettlement.test.ts=
 - A raw route can authenticate on every kind of connection without touching contracts, by the helper upstream's device and preview routes use. Read in the source and run on a local connection only. :: =grep -n "authenticateMediaRequest" apps/server/src/auth/http.ts apps/server/src/actors/ActorPictures.ts=
+
+** Upstream merges
+Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
+
+- 2026-11-19, to upstream =00200bd412=: 241 commits in two days. Six of the seven seam files had changed upstream, =Sidebar.tsx= by 243 lines. One conflict, in a listed seam: upstream had rewritten the line next to the menu entry to translate its label. Upstream also added a lint rule that every piece of interface text be translated, which the fork answered by marking its text English only. Eight minutes, with all checks, upstream's 38 sidebar browser tests and the dock scenario passing afterwards. :: =git log --oneline -1 07a418a37a=
 
 ** Prior art, 2026-11-18
 - Nobody has shipped a picture on an ordinary thread. The nearest work is a grid of pinned threads as title tiles, =pingdotgg/t3code#30550=, closed unmerged on 2026-11-12. It edits upstream's sidebar files in place, and two of its eight files no longer apply to upstream two weeks later. :: =gh pr diff 30550 -R pingdotgg/t3code | git apply --check --3way=
