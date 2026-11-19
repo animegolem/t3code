@@ -18,6 +18,7 @@ export type ThreadActionMenuId =
   | `snooze:${string}`
   | "unsnooze"
   | "rename"
+  | "set-picture"
   | "regenerate-title"
   | "mark-unread"
   | "share-guest"
@@ -168,6 +169,7 @@ export function buildThreadActionMenuItems(
         ]
       : []),
     { id: "rename", label: "Rename thread", icon: "pencil", separatorBefore: true },
+    { id: "set-picture", label: "Set picture…" },
     ...(state.supports.titleRegeneration
       ? [
           {

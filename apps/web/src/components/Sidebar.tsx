@@ -268,6 +268,8 @@ import {
   type SidebarProviderEntry,
   type SidebarSweepAction,
 } from "./sidebar/SidebarThreadRow";
+import { ActorDock } from "../actors/ActorDock";
+import { openActorPictureDialog } from "../actors/actorPictureDialogState";
 import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
 import {
   SidebarProjectFolderHeader,
@@ -1957,7 +1959,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       return [];
     }
     const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
-    const pinnedRows = rowsOf(pinnedThreads, "pinned");
+    // The actor dock draws pinned threads, so they get no rows here.
+    const pinnedRows: SidebarListItem[] = [];
     items.push(...pinnedRows);
     items.push({ kind: "marker", marker: "pinned-divider" });
     const activeRows = rowsOf(activeThreads, "active");
@@ -2776,6 +2779,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             }
             return;
           }
+          case "set-picture":
+            openActorPictureDialog(threadRef);
+            return;
           case "rename":
             startThreadRename(threadRef, thread.title);
             return;
@@ -3199,6 +3205,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           </SidebarGroup>
         }
       >
+        <ActorDock
+          activeThreadKey={routeRowThreadKey}
+          onOpen={(threadRef) => void navigateToThread(threadRef)}
+        />
         <SidebarGroup className="flex-1" role="presentation">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (

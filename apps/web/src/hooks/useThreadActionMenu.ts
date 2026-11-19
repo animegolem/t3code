@@ -1,4 +1,5 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import { openActorPictureDialog } from "../actors/actorPictureDialogState";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
 import {
@@ -238,6 +239,9 @@ export function useThreadActionMenu(input: {
           await reportFailure("Failed to update auto-settle", () =>
             setThreadAutoSettle(threadRef, action === "auto-settle:enabled"),
           );
+          return;
+        case "set-picture":
+          openActorPictureDialog(threadRef);
           return;
         case "rename":
           onStartRename();
