@@ -6,8 +6,10 @@ import { runPromise, test, WEB } from "./t3.ts";
 // In-app navigation percent-encodes the colon in a thread ID; a link opened directly does not.
 const endsWithThread = (threadId: string) => new RegExp(`${threadId.split(":").at(-1)}$`);
 
-/** Longer than the dock keeps a dropped order on screen by itself, so what shows afterwards is the server's order. */
+/** Longer than the dock keeps a dropped order on screen by itself, so what shows afterwards is the client's own thread list. */
 const PAST_THE_HOLD_MS = 5000;
+/** Long enough for a freshly loaded page to replace anything it cached with the server's threads. */
+const SERVER_THREADS_MS = 3000;
 const DRAG_STEPS = 8;
 
 test(
@@ -77,7 +79,7 @@ test(
     expect(await browser.evaluate(() => window.location.pathname)).toBe(opened);
     await app.screenshot("after-drop");
 
-    // The order still shows once the dock has stopped holding it, so it is the order the server saved.
+    // The order still shows once the dock has stopped holding it.
     await runPromise(Effect.sleep(PAST_THE_HOLD_MS));
     expect((await dock()).map((tile) => tile.title)).toEqual(moved);
 
@@ -97,5 +99,12 @@ test(
     await runPromise(Effect.sleep(PAST_THE_HOLD_MS));
     expect((await dock()).map((tile) => tile.title)).toEqual(movedAgain);
     await app.screenshot("after-second-drop");
+
+    // A freshly loaded page knows only what the server saved.
+    await app.open("/");
+    await expect(tiles).toHaveCount(3);
+    await runPromise(Effect.sleep(SERVER_THREADS_MS));
+    expect((await dock()).map((tile) => tile.title)).toEqual(movedAgain);
+    await app.screenshot("after-reload");
   },
 );

@@ -114,6 +114,8 @@ The first build works in the real app; see [[*What We've Proven]]. These parts o
 - The dock with a second environment connected.
 - The tooltip that shows an actor's title and status, and the status dot.
 - Setting a picture from an image file. Only letters on a colour has been run.
+- A drag from one row of pictures to another. The scenario has three pictures in one row; the sidebar wraps after about six.
+- A reorder the server refuses. The dock is written to go back to the server's order and show a message; no test makes a write fail.
 - The mobile client still listing the same threads as pinned. The fork changes no contract and no table, so it should; it has not been run.
 
 Known gaps, each a decision the build made to stay small:
@@ -155,7 +157,7 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 ** The build, 2026-11-19
 - The dock works in the real app. One scenario pins a thread from its menu and sees its picture appear; sets the picture from the dialog and finds the SVG on disk under the encoded thread ID; overwrites that file as an agent would and sees the new picture after the window gains focus; opens another thread and returns by the picture; and opens the thread menu from the picture. :: =cd scripts && pnpm exec e2e run scenarios/pinned-thread-joins-actor-dock.e2e.ts=
 - With no actors the dock draws nothing. :: the same scenario, before the pin
-- Dragging a picture changes the pin order and the server keeps it. A second scenario pins three threads, drags the last picture to the front, and sees the new order at once and again after the dock has stopped holding it. Letting go does not open the dragged thread. A second drag, planned from the saved order, also holds. The owner chose dragging on 2026-11-19 after using the dock. :: =cd scripts && pnpm exec e2e run scenarios/dragged-actor-keeps-its-new-place.e2e.ts=
+- Dragging a picture changes the pin order and the server keeps it. A second scenario pins three threads, drags the last picture to the front, and sees the new order at once and again after the dock has stopped holding it. Letting go does not open the dragged thread. A second drag, planned from the first one's order, also holds. The client shows a reordered pin before the server confirms it, so the scenario then loads the page afresh and finds the same order. The owner chose dragging on 2026-11-19 after using the dock. :: =cd scripts && pnpm exec e2e run scenarios/dragged-actor-keeps-its-new-place.e2e.ts=
 - The "Working" section in the sidebar is upstream's, not the fork's. It arrived in =b33eda1399= and became the default in =3de45c6254=. Each client keeps its own setting, so a dev run shows it even where the installed app has it switched off. :: =git log -S'sidebarWorkingShelfEnabled' --oneline -- packages/contracts/src/settings.ts=
 - Opening an actor from outside the project filter leaves the filter as it was set. Before the fix the same step failed: upstream's sidebar clears the filter to reveal the open thread's row, and a thread the dock draws has no row, so the filter was cleared for good. :: the same scenario, the step after the filter is chosen
 - A snoozed actor returns to the dock in the minute its snooze ends. The minute clock is not an instant the snooze check can use as it stands; the dock converts it. :: =cd apps/web && pnpm exec vp test run --project unit src/actors=
