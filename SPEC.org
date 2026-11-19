@@ -80,11 +80,11 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-Seven upstream files, 28 lines added and 1 changed, as of the first build. Measure with =git diff --numstat <upstream>..dock= and leave out the fork's own files.
+Seven upstream files, 40 lines added and 2 changed, as of the first build. Measure with =git diff --numstat <upstream>..dock= and leave out the fork's own files.
 
 | File | What the fork adds |
 |------+--------------------|
-| =apps/web/src/components/Sidebar.tsx= | two imports, the dock's mount, one line that stops drawing pinned rows, one menu case |
+| =apps/web/src/components/Sidebar.tsx= | three imports, the dock's mount, one line that stops drawing pinned rows, one menu case, one condition that keeps the row reveal from clearing the project filter |
 | =apps/web/src/components/threadActionMenu.logic.ts= | the menu item's ID and its entry |
 | =apps/web/src/components/threadActionMenu.logic.test.ts= | the item in two expected lists |
 | =apps/web/src/hooks/useThreadActionMenu.ts= | one import and one menu case |
@@ -108,7 +108,7 @@ Upstream's checks apply unchanged: =vp run check:changed= before a commit, and u
 The first build works in the real app; see [[*What We've Proven]]. These parts of it are built and not yet seen working there:
 
 - A 21st actor reached through the overflow entry. The split is unit-tested; the entry has never been opened in the app.
-- The dock with a project filter set, and with a second environment connected.
+- The dock with a second environment connected.
 - The tooltip that shows an actor's title and status, and the status dot.
 - Setting a picture from an image file. Only letters on a colour has been run.
 - The mobile client still listing the same threads as pinned. The fork changes no contract and no table, so it should; it has not been run.
@@ -121,6 +121,9 @@ Known gaps, each a decision the build made to stay small:
 - A change an agent makes to its picture file shows when the window next gains focus or the set of actors changes, not at once.
 - Deleting a thread leaves its picture file behind. The folder's cap bounds the cost.
 - An agent sets its picture by writing its picture file. There is no tool for it: a new tool costs three upstream files, one of them a byte budget every upstream tool change also edits.
+- Dragging a row onto the pinned boundary still pins it, but its place among the existing actors is computed against a list with no pinned rows. Where it lands is untested.
+- Upstream's next and previous thread keys still step through pinned threads, which now have no row to show which one is open. The dock marks it instead.
+- An actor on a machine that runs stock T3 Code shows in the dock with its default picture. That machine has no picture route, so its picture cannot be set from the dialog.
 
 ** TODO Merge upstream once
 Do this before anything else is built on the dock. Record the result.
@@ -150,6 +153,8 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 ** The build, 2026-11-19
 - The dock works in the real app. One scenario pins a thread from its menu and sees its picture appear; sets the picture from the dialog and finds the SVG on disk under the encoded thread ID; overwrites that file as an agent would and sees the new picture after the window gains focus; opens another thread and returns by the picture; and opens the thread menu from the picture. :: =cd scripts && pnpm exec e2e run scenarios/pinned-thread-joins-actor-dock.e2e.ts=
 - With no actors the dock draws nothing. :: the same scenario, before the pin
+- Opening an actor from outside the project filter leaves the filter as it was set. Before the fix the same step failed: upstream's sidebar clears the filter to reveal the open thread's row, and a thread the dock draws has no row, so the filter was cleared for good. :: the same scenario, the step after the filter is chosen
+- A snoozed actor returns to the dock in the minute its snooze ends. The minute clock is not an instant the snooze check can use as it stands; the dock converts it. :: =cd apps/web && pnpm exec vp test run --project unit src/actors=
 - Upstream's sidebar browser tests pass with the pinned rows gone: 38 tests in 7 files. :: =cd apps/web && pnpm exec vp test run --project browser src/components/Sidebar*.browser.test.* src/components/sidebar/routeReveal.browser.test.tsx=
 - Upstream's checks pass on the fork's change: format, lint, unused exports, type-check of 42 packages, the tests beside the changed files, and React Compiler coverage. :: =pnpm exec vp run check:changed=
 - Pinning stops auto-settle. Upstream's own test builds an old pinned thread with a finished run and asserts it is not among the threads auto-settle would take. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is older than the code and is wrong. :: =cd apps/server && pnpm exec vp test run src/orchestration-v2/ProjectionSettlement.test.ts= and =grep -n '"pinned", { pinnedAt: old }' apps/server/src/orchestration-v2/ProjectionSettlement.test.ts=
