@@ -145,7 +145,8 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
-- Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. Needs a look at upstream's release build first.
+- Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. The release build has been read, not run; see [[*The daily client and Rex, 2026-11-20]].
+- Should the dock also hold actors that run in Rex, a terminal multiplexer, and show such an actor's terminal in the main area with the sidebar still open? The owner raised it on 2026-11-20 as a way to move over gradually. Decides: the owner, after a probe of Rex's terminal data connection on a scratch session shows whether T3 Code's terminal can draw it.
 - What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
 - Does typing =/clear= in the composer start a new provider session under the same thread? Decides: a test.
@@ -165,6 +166,19 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 - Upstream's checks pass on the fork's change: format, lint, unused exports, type-check of 42 packages, the tests beside the changed files, and React Compiler coverage. :: =pnpm exec vp run check:changed=
 - Pinning stops auto-settle. Upstream's own test builds an old pinned thread with a finished run and asserts it is not among the threads auto-settle would take. Upstream's user guide still says "Pinning does not prevent automatic settlement"; that sentence is older than the code and is wrong. :: =cd apps/server && pnpm exec vp test run src/orchestration-v2/ProjectionSettlement.test.ts= and =grep -n '"pinned", { pinnedAt: old }' apps/server/src/orchestration-v2/ProjectionSettlement.test.ts=
 - A raw route can authenticate on every kind of connection without touching contracts, by the helper upstream's device and preview routes use. Read in the source and run on a local connection only. :: =grep -n "authenticateMediaRequest" apps/server/src/auth/http.ts apps/server/src/actors/ActorPictures.ts=
+
+** The daily client and Rex, 2026-11-20
+Read from upstream's docs and tags and from the installed Rex command line, version =0.1.0-preview.21=. Nothing here was built.
+
+- The fork may not open the installed app's data today. The installed app last ran as =0.1.11=, and that tag has three database migrations (100 to 102) that the fork's merge base lacks. The fork has to merge upstream to at least the version that last opened the data before it is pointed there. :: =git diff --name-status v0.1.11..00200bd412 -- apps/server/src/persistence/Migrations=
+- The fork adds no migration, so a fork build and a stock build made from the same upstream commit can take turns on the same data. A fork built from =main= moves the data ahead of the stable app.
+- Upstream builds a macOS app with =pnpm run dist:desktop:dmg:arm64=. Not run. Whether an unsigned local build can sign in to T3 Connect, and how its updater is kept from installing a stock release over it, are not known.
+- A dev run in a linked worktree seeds its database from a read-only copy of the installed app's, when that is at most 500 MiB. The main checkout uses =~/.t3/dev= and is not seeded. :: =docs/operations/development.md=, "State and ports"
+- Rex has no command that attaches a terminal to a running session. =rex block stream= exists and answers "not implemented". :: =rex --help= and =rex block stream BLOCK=
+- Rex's server streams a terminal to a client over a data connection opened with a single-use ticket, under the name =rex.data.terminal.v1=. What travels on it has not been seen. :: =rex api describe data.connect=
+- Rex reports, for each terminal, the status its program last gave, such as an agent that is done. It returns a terminal's screen as escape sequences, types text into a terminal, and tells its app to show a session. :: =rex block call -b BLOCK program_status=, =rex api ls=, =rex -C CLIENT actions=
+- T3 Code's own terminal draws with libghostty compiled to WebAssembly. :: =ls apps/web/src/terminal/ghostty=
+- Upstream already lets an agent that runs outside T3 Code read, start and message threads through the environment's MCP server. It gives such an agent no place in the sidebar. :: =docs/user/outside-agents.md=
 
 ** Upstream merges
 Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
