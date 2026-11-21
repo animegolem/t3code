@@ -63,7 +63,8 @@ import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
-const DESKTOP_APP_ID = "com.t3tools.t3code";
+// The fork app has its own ID, so macOS keeps its link handlers and permissions apart from upstream's.
+const DESKTOP_APP_ID = "com.t3tools.t3code.dock";
 const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
@@ -2774,7 +2775,8 @@ export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIcon
   }
 
   return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
+    // The fork borrows the nightly icon, so its Mac app is told apart from upstream's.
+    macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
     linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
     windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
   };
@@ -2798,7 +2800,7 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
 export function resolveDesktopProductName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
     ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    : "T3 Code Dock (Beta)";
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -3954,7 +3956,8 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
       : undefined;
   const stagePackageJson: StagePackageJson = {
-    name: "t3code",
+    // Electron names the keychain item for stored secrets after this, so the fork has its own.
+    name: "t3code-dock",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
