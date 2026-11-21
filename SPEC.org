@@ -137,7 +137,7 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-Eight upstream files, 63 lines added and 2 changed, as of 2026-11-20. Measure with =git diff --numstat upstream/main...dock= and leave out the fork's own files.
+Eight upstream files, 63 lines added and 2 changed, as of the second upstream merge. Measure with =git diff --numstat upstream/main...dock= and leave out the fork's own files.
 
 | File | What the fork adds |
 |------+--------------------|
@@ -249,7 +249,7 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. The release build has been read, not run; see [[*The daily client and Rex, 2026-11-20]].
-- Should Rex actors show in the mobile client? The owner moves to T3 Code partly for its mobile client, and an agent still in Rex is absent there. It means the fork's first change to the mobile client. Decides: the owner.
+- Should Rex actors show in the mobile client? The owner moves to T3 Code partly for its mobile client, and an agent still in Rex is absent there. It means the fork's first change to the mobile client. Decides: the owner, who held it off on 2026-11-20: Rex actors are a way across while it is not settled where the house's own tools will live.
 - Should the server load Rex's snapshot instead of reading the screen? It would make the first paint exact, where today's is a close guess, and need no waiting. The web engine's Ghostty is too old to load it, and moving that pin is a seam in upstream's build. A second, newer engine on the server could load the snapshot and write it out as escape sequences, in the fork's own files. Decides: the maintainer, if the inexact path shows up in use.
 - Should a Rex actor's picture show what its program reports, such as working or waiting? Decides: the owner, after using Rex actors.
 - What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
@@ -319,6 +319,7 @@ Built against Rex =0.1.0-preview.21=, API revision 18. Every run used a Rex sess
 Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
 
 - 2026-11-19, to upstream =00200bd412=: 241 commits in two days. Six of the seven seam files had changed upstream, =Sidebar.tsx= by 243 lines. One conflict, in a listed seam: upstream had rewritten the line next to the menu entry to translate its label. Upstream also added a lint rule that every piece of interface text be translated, which the fork answered by marking its text English only. Eight minutes, with all checks, upstream's 38 sidebar browser tests and the dock scenario passing afterwards. :: =git log --oneline -1 07a418a37a=
+- 2026-11-20, to upstream =a6e81f3002=: 379 commits in one day. Three conflicts, all in listed seams. =Sidebar.tsx=: upstream changed the import line next to the fork's three. =threadActionMenu.logic.ts=: upstream gave the rename entry a disabled state, on the line next to the fork's entry. =routeTree.gen.ts=: upstream's file was taken and the plugin wrote the fork's route into it again. About five minutes to resolve. Afterwards: the fork's 29 server tests and 110 web tests beside the seams, upstream's 39 sidebar browser tests, and all three dock scenarios pass. Upstream's own check passed format, lint, unused code and the type-check of 42 packages, then stopped its test step at its 15-minute limit: a merge puts all 557 of upstream's changed test files in it. That step was not run to the end. :: =git log --oneline -1 --merges dock=
 
 ** Prior art, 2026-11-18
 - Nobody has shipped a picture on an ordinary thread. The nearest work is a grid of pinned threads as title tiles, =pingdotgg/t3code#30550=, closed unmerged on 2026-11-12. It edits upstream's sidebar files in place, and two of its eight files no longer apply to upstream two weeks later. :: =gh pr diff 30550 -R pingdotgg/t3code | git apply --check --3way=
