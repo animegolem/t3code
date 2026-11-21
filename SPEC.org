@@ -22,6 +22,7 @@ The fork stays small enough to merge upstream every week or two without dread. E
 - An agent that still runs in Rex has a picture in the dock too. Its picture opens its terminal in the main area, with the sidebar still open, so a person can move agents from Rex to T3 Code one at a time.
 - Running waves are listed in the sidebar. A wave's room opens as a tab in the right panel, from the sidebar or from the thread that started the wave.
 - The stock mobile client keeps working with no change. It shows thread actors as upstream shows pinned threads, and no Rex actors.
+- The fork's packaged Mac app is an app of its own. It installs beside the stock app and both can be open at once, each on its own data, so a person can move over at their own pace and keep the stock app to compare against.
 
 * Explicit Non-Goals
 - Changing how any provider is run, resumed, compacted or forked.
@@ -74,6 +75,10 @@ Work that the wave daemon runs and this fork only displays.
 ** Upkeep
 - Seam :: A place where the fork edits a file that upstream owns.
   /Avoid/: patch, hook
+- Stock app :: Upstream's released T3 Code as installed on the Mac, named "T3 Code (Beta)".
+  /Avoid/: installed app, real app, upstream app
+- Fork app :: The fork packaged as a Mac app, named "T3 Code Dock (Beta)".
+  /Avoid/: Dock app, fork build, the build
 
 * Interfaces, Data Shapes, and State Transitions
 ** The dock file
@@ -94,6 +99,28 @@ rex-socket "/path/to/server.sock"
 #+end_src
 
 The reader takes the part of KDL that means the same in KDL 1 and KDL 2: nodes, quoted strings, numbers, properties, children, comments, the slashdash, and a backslash that continues a line. It refuses a bare word as a value, raw and multi-line strings, type annotations and the keywords for true, false and null, and says on which line.
+
+** The fork app's identity
+Two copies of an app collide on whatever they both claim. The fork app claims its own of each thing in this table. The profile folder and the home are in =apps/desktop/src/app/forkIdentity.ts=. The app ID, the two names and the icon are in =scripts/build-desktop-artifact.ts=, which cannot import from the desktop app.
+
+| What | Stock app | Fork app |
+|------+-----------+----------|
+| Name in Finder, the Dock and the menu bar | T3 Code (Beta) | T3 Code Dock (Beta) |
+| App ID, by which macOS keeps link handlers and permissions | =com.t3tools.t3code= | =com.t3tools.t3code.dock= |
+| Package name, after which Electron names the keychain item for stored secrets | =t3code= | =t3code-dock= |
+| Electron profile folder in =~/Library/Application Support=, which holds the lock that allows one running copy | =t3code-v2= | =t3code-dock= |
+| T3 home when =T3CODE_HOME= names none; the state directory is its =userdata= folder | =~/.t3= | =~/.t3-dock= |
+| Icon | upstream's black icon | upstream's nightly icon |
+
+The two still share these:
+
+- The name shown inside the window, "T3 Code (Beta)", and the version number.
+- The =t3code://= link scheme. Upstream's sign-in service returns to =t3code://app/= and accepts only addresses it lists, so the fork app cannot use a scheme of its own.
+- The =t3= command in =~/.local/bin=, which stays with whichever app owned it first.
+- Whatever agent programs keep outside T3 Code, such as their own sign-in and session files.
+- The T3 Connect account, where the fork app's home shows as a second environment.
+
+A development run keeps upstream's names and upstream's home, =~/.t3/dev=.
 
 ** Routes
 Both are raw routes beside the picture route, authenticated the way upstream's media routes are.
@@ -133,11 +160,13 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - One server holds at most 16 viewers open. Output held while a terminal opens is at most 8 MiB, typing held behind an unanswered write at most 1 MiB, and output queued for a slow viewer at most 16 MiB; past any of these the viewer is closed.
 - T3 Code never answers a program's questions to the terminal, such as where the cursor is. Rex's own terminal answers them, and a second answer would be typed into the program.
 - Typing reaches Rex one call at a time, each sent after the one before it is answered, because Rex runs separate calls in any order. Checked by a bridge test.
+- The fork app and the stock app share no state directory, no Electron profile and no keychain item, so both can be open at once and neither reads or writes the other's data. Checked by the desktop tests for the profile folder and the home, and by reading each built app for the names in [[*The fork app's identity]].
+- An explicit =T3CODE_HOME= still chooses the home, in the fork app as in the stock app. A development run resolves the same home as upstream's. Checked by =DesktopEnvironment= tests.
 - The fork works with Rex absent. A Rex actor's picture still shows; opening it says that Rex could not be reached.
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-Eight upstream files, 63 lines added and 2 changed, as of the second upstream merge. Measure with =git diff --numstat upstream/main...dock= and leave out the fork's own files.
+Eighteen upstream files, 89 lines added and 18 changed, as of the fork app's first build. Eight of them carry the dock and the Rex actors, 63 lines added and 2 changed. Ten carry the fork app's identity, 26 lines added and 16 changed; five of those are upstream's tests, which pin the names the fork replaces. Measure with =git diff --numstat upstream/main...dock= and leave out the fork's own files.
 
 | File | What the fork adds |
 |------+--------------------|
@@ -149,11 +178,19 @@ Eight upstream files, 63 lines added and 2 changed, as of the second upstream me
 | =apps/web/src/routes/__root.tsx= | one import and the picture dialog's host |
 | =apps/server/src/server.ts= | one import and one entry in the route list, which names all the fork's routes at once |
 | =apps/web/src/routeTree.gen.ts= | the Rex actor page's route, 22 lines that upstream's router plugin writes. After a merge that conflicts here, take upstream's file and let the plugin write it again: =cd apps/web && pnpm exec vp test run --project unit src/actors= |
+| =apps/desktop/src/app/DesktopUserData.ts= | one import, and the fork's profile folder in place of upstream's |
+| =apps/desktop/src/app/DesktopStatePaths.ts= | one import, one input that says whether this is a development run, and the fork's home in place of upstream's when it is not |
+| =apps/desktop/src/app/DesktopEnvironment.ts= | that input, at one call |
+| =apps/desktop/src/app/DesktopEarlyElectronStartup.ts= | that input, at one call |
+| =scripts/build-desktop-artifact.ts= | the fork's app ID, product name, package name and Mac icon in place of upstream's, with a comment on three of them |
+| =apps/desktop/src/app/DesktopUserData.test.ts=, =DesktopClerk.test.ts=, =DesktopAppIdentity.test.ts= | the profile folder's name where the tests pin it |
+| =apps/desktop/src/app/DesktopEnvironment.test.ts= | the packaged app's state directory in one expectation |
+| =scripts/build-desktop-artifact.test.ts= | the app ID in two expectations |
 
-The fork's own files are =apps/web/src/actors/=, =apps/server/src/actors/=, the route file =apps/web/src/routes/_chat.rex.$rexEnvironmentId.$rexActor.tsx=, three scenarios in =scripts/scenarios/= (=pinned-thread-joins-actor-dock=, =dragged-actor-keeps-its-new-place= and =rex-actor-opens-its-terminal=) and this spec.
+The fork's own files are =apps/web/src/actors/=, =apps/server/src/actors/=, the route file =apps/web/src/routes/_chat.rex.$rexEnvironmentId.$rexActor.tsx=, =apps/desktop/src/app/forkIdentity.ts=, three scenarios in =scripts/scenarios/= (=pinned-thread-joins-actor-dock=, =dragged-actor-keeps-its-new-place= and =rex-actor-opens-its-terminal=) and this spec.
 
 * Fault Model
-What can fail at each boundary the Rex actors add, and what the fork does.
+What can fail at each boundary the fork adds, and what the fork does.
 
 | Boundary | What fails | What the fork does |
 |----------+------------+--------------------|
@@ -169,6 +206,10 @@ What can fail at each boundary the Rex actors add, and what the fork does.
 | A viewer | It sends something that is not one of its four messages, or too much | It is closed. |
 | | It reads too slowly | It is closed once 16 MiB wait for it. |
 | | Its sign-in ends | It is closed, and both Rex connections with it. |
+| The stock app beside the fork app | A =t3code://= link is opened while both are installed | It goes to the app that was opened most recently, because each claims the scheme when it starts. A sign-in begun in one app can so return to the other. Quit the other app for the length of a sign-in. |
+| | Both servers want the same port | The second looks upward from 3773 and takes the next free one. Seen: the fork app on 3774. |
+| | One app is pointed at the other's home while that one runs | Upstream's lock on the home refuses the second server and says so. Read in the source, not tried. |
+| | The fork app is rebuilt | Its signature is new each time, so macOS may ask for the login password before the new build reads the keychain item the old one made. Not yet seen. |
 
 Rex gives the screen in one call and the output on another connection, and nothing ties a place in one to a place in the other. Output received before the screen was asked for is already in the screen, so it is dropped. Output received while that call was in flight may be in the screen or not. So the server waits for output to pause for 40 ms, up to 300 ms, reads the screen, and reads it again if any output arrived during the read, four times at most. If the terminal never pauses, the last screen is sent and the output from its read is drawn after it: that output can show twice until the program next repaints.
 
@@ -210,28 +251,33 @@ Known gaps, each a decision the build made to stay small:
 - Upstream's next and previous thread keys still step through pinned threads, which now have no row to show which one is open. The dock marks it instead.
 - An actor on a machine that runs stock T3 Code shows in the dock with its default picture. That machine has no picture route, so its picture cannot be set from the dialog.
 
-** TODO Launch the Mac build
-The fork is built into a Mac app that nobody has opened; see [[*The Mac build, 2026-11-20]]. Opening it is the owner's step, because the installed app has to be quit first and that ends every session running in it. The disk image is =release/T3-Code-0.1.11-arm64.dmg= in the repository; build it again with =RUSTUP_TOOLCHAIN=stable pnpm run dist:desktop:dmg:arm64=.
+** TODO Move into the fork app
+The fork app is installed as =/Applications/T3 Code Dock (Beta).app= and has been opened beside the stock app; see [[*The fork app, 2026-11-21]]. It starts empty: no thread, project, setting, key binding or sign-in comes over from the stock app. The owner moves work into it at their own pace and keeps the stock app to compare against.
 
-The built app has the stock app's name, ID and version. The dock of pictures at the top of the sidebar is how to tell the fork from the stock app.
+To build it again, from the repository:
 
-1. Quit the installed app. In Finder, rename it in =/Applications= to "T3 Code (Beta) stock.app" instead of deleting it, so that going back is a rename.
-2. Optional, and only after quitting: copy =~/.t3/userdata= somewhere as a backup. A copy taken while the app runs can be inconsistent.
-3. Open the disk image and drag the app to =/Applications=.
-4. First launch on a trial T3 home, which leaves the real threads and database alone:
-   =T3CODE_HOME="$HOME/.t3-fork-trial" T3CODE_DISABLE_AUTO_UPDATE=true "/Applications/T3 Code (Beta).app/Contents/MacOS/T3 Code (Beta)"=
-   Expect an empty app. Watch for a keychain prompt and whether the window is still signed in.
-5. To try a Rex actor there, write =~/.t3-fork-trial/userdata/actors/dock.kdl= with one =rex "name"= node that names a Rex session, and bring the window to the front.
-6. Quit, then open the app normally. It now runs on the real data. The dock file for it is =~/.t3/userdata/actors/dock.kdl=.
-7. To go back: quit, delete the fork's app, and rename the stock app back.
+#+begin_src sh
+(export $(grep -E '^[A-Z0-9_]+=' .env.example | xargs) && RUSTUP_TOOLCHAIN=stable pnpm run dist:desktop:dmg:arm64)
+#+end_src
 
-Not yet seen, each to note on the first launch:
+The first half gives the build upstream's public T3 Connect settings; a build without them has no T3 Connect, so the phone cannot reach it. They are given in the command and not kept in a =.env= file, because that file would also change every development run and scenario. To install the result, quit the fork app and replace it in =/Applications= with the app from =release/T3-Code-0.1.11-arm64.zip=.
 
-- Whether the app opens at all without a signature, and what macOS asks.
-- Whether the keychain lets a differently signed app read the stored key, and so whether stored sign-in and provider secrets still open.
-- Whether T3 Connect signs in, and whether the phone app still reaches this Mac.
-- Rex actors in the packaged app. They were run in a dev run only.
-- Going back to the stock app afterwards.
+For the owner, in the fork app:
+
+1. Sign in to T3 Connect. If the browser hands the sign-in back to the stock app, quit the stock app and sign in again; see [[*Fault Model]].
+2. On the phone, this Mac now shows twice: the stock app's environment and the fork app's.
+3. Add the projects to work in.
+4. For a Rex actor, write =~/.t3-dock/userdata/actors/dock.kdl= with one =rex "name"= node that names a Rex session, and bring the window to the front.
+5. To leave: quit the fork app and delete it. The stock app was not changed. The fork app's data stays in =~/.t3-dock= and =~/Library/Application Support/t3code-dock= until those are deleted.
+
+Not yet seen, each to note when it first comes up:
+
+- The fork app's window, by eye. The system lists one window for it; a picture of it could not be taken from an agent's session, which has no permission to record the screen.
+- Signing in to T3 Connect in the fork app, and the phone reaching it.
+- A thread run in the fork app, and whether agent programs find their existing sign-in.
+- A Rex actor in the fork app. Its server answers the dock's route; no terminal has been opened from it.
+- What macOS asks for: the keychain after a rebuild, and permissions such as the microphone.
+- Why the stock app quit a minute after the fork app first opened; see [[*The fork app, 2026-11-21]].
 
 ** TODO Live with Rex actors
 Rex actors work in the real app; see [[*Rex actors, 2026-11-20]]. The owner asked for them on 2026-11-20 and chose a KDL file and taking ownership. These parts are built and not yet seen working there:
@@ -271,8 +317,10 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
-- Does the fork replace the installed app as the daily client, and if so how is it updated? Decides: the owner. The fork builds into a Mac app that has not been launched; see [[*The Mac build, 2026-11-20]]. Still to find out by launching it: whether the stored sign-in and secrets open for an app with a different signature, and whether T3 Connect signs in.
-- Should a local build be signed with the owner's own Apple development certificate? An unsigned build has a different identity each time it is built, so macOS may ask again for the keychain and for permissions such as the microphone after every rebuild. Decides: the owner.
+- Does the fork app become the daily client? Decides: the owner, by using it beside the stock app. Still to find out: whether T3 Connect signs in there and the phone reaches it.
+- Should the fork app start from a copy of the stock app's threads instead of empty? The two read the same database as of the second upstream merge, which is shown for the database only. Decides: the owner, who on 2026-11-21 chose to wind work down in the stock app and start it afresh in the fork app.
+- Should the fork app be signed with the owner's own Apple development certificate? Unsigned, each build has a new identity, so macOS may ask again for the keychain and for permissions such as the microphone after every rebuild. Permissions follow the app that hosts a session: the system log charges a command run in a stock app session to the stock app. So a session in the fork app is expected to start with none of the stock app's grants, such as control of other apps or screen recording, and may lose its own at each rebuild. Decides: the owner, once a rebuild has shown what macOS asks.
+- Should the fork app's name show inside its window too? Today only Finder, the Dock, the menu bar and the icon tell the two apart. The name inside the window also feeds upstream's Linux and Windows code, so changing it is a wider seam. Decides: the owner, if the two get confused in use.
 - Should Rex actors show in the mobile client? The owner moves to T3 Code partly for its mobile client, and an agent still in Rex is absent there. It means the fork's first change to the mobile client. Decides: the owner, who held it off on 2026-11-20: Rex actors are a way across while it is not settled where the house's own tools will live.
 - Should the server load Rex's snapshot instead of reading the screen? It would make the first paint exact, where today's is a close guess, and need no waiting. The web engine's Ghostty is too old to load it, and moving that pin is a seam in upstream's build. A second, newer engine on the server could load the snapshot and write it out as escape sequences, in the fork's own files. Decides: the maintainer, if the inexact path shows up in use.
 - Should a Rex actor's picture show what its program reports, such as working or waiting? Decides: the owner, after using Rex actors.
@@ -340,7 +388,7 @@ Built against Rex =0.1.0-preview.21=, API revision 18. Every run used a Rex sess
 - The dock file's reader, the bridge and the stream readers pass 29 tests, and upstream's checks pass on the change. :: =cd apps/server && pnpm exec vp test run src/actors= and =pnpm exec vp run check:changed=
 
 ** The Mac build, 2026-11-20
-Built from the second upstream merge, =b32c07c190=, on an Apple silicon Mac. The app was unpacked and read. It was not launched.
+Built from the second upstream merge, =b32c07c190=, on an Apple silicon Mac. The app was unpacked and read. It was not launched. This build had the stock app's identity; the next day's has its own, see [[*The fork app, 2026-11-21]].
 
 - The fork builds into a Mac app. The command wrote a 237 MB disk image and a zip into =release/=, which git ignores, and changed no tracked file. :: =RUSTUP_TOOLCHAIN=stable pnpm run dist:desktop:dmg:arm64=
 - The build needs a Rust of 1.95 or later for the resource monitor. With an older default it fails at that step; naming the toolchain in the command is enough. Upstream's release job uses =stable=. :: the same command without the variable, on a machine whose default Rust is 1.90
@@ -353,6 +401,21 @@ Built from the second upstream merge, =b32c07c190=, on an Apple silicon Mac. The
 - That is shown for the database only. The merged upstream is 157 commits and 730 files past 0.1.11, and the other things kept in the state directory, such as settings, key bindings and stored secrets, were not compared. Going back to the stock app after running the fork is a downgrade across those 157 commits, and has not been tried.
 - Upstream has a supported way to run a packaged app on a T3 home of its own: its release check sets =T3CODE_HOME= and =T3CODE_DISABLE_AUTO_UPDATE=. A first launch that way leaves the real database, threads and state directory alone. It still uses the one Electron profile, which holds the window's sign-in and its own stored state. :: =scripts/smoke-desktop-app.ts=
 - Whether the packaged server can reach Rex is not shown. The WebSocket library's code is in the app's bundle; it has not run from there. :: =grep -c -a undici "T3 Code (Beta).app/Contents/Resources/app.asar"=
+
+** The fork app, 2026-11-21
+Built from =8daa98e4ec= with the identity change not yet committed, on an Apple silicon Mac. The commit that followed holds the same names; it moved three of them from an imported file into the build script, because the type check refuses that import. The app was read, installed beside the stock app and opened while the stock app ran.
+
+- The built app has the fork's identity: the name "T3 Code Dock (Beta)", the ID =com.t3tools.t3code.dock= and the package name =t3code-dock=. :: =/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "/Applications/T3 Code Dock (Beta).app/Contents/Info.plist"=, and =package.json= inside its =app.asar=
+- Its code carries the fork's profile folder and home and not upstream's profile folder. :: =grep -c -a -F t3code-v2 "/Applications/T3 Code Dock (Beta).app/Contents/Resources/app.asar"= prints 0; the same for =t3code-dock= and =.t3-dock= prints more than 0
+- It carries upstream's public T3 Connect settings, in the desktop program, the server and the web client. The build of the day before carried none: the repository has no =.env= file, and without one upstream builds with T3 Connect off. :: =grep -rl -F pk_live_= over the unpacked =app.asar=
+- The two apps run at once. Opened with =open= while the stock app ran, the fork app started its own server on port 3774 with its own process, beside the stock app's on 3773. :: =server-runtime.json= in =~/.t3-dock/userdata= and in =~/.t3/userdata=
+- The fork app made its own data: the home =~/.t3-dock=, the profile folder =~/Library/Application Support/t3code-dock= and the keychain item "t3code-dock Safe Storage". The stock app's item is "t3code Safe Storage", named after its package and not after the name it shows. :: =security dump-keychain | grep "Safe Storage"=
+- While open, the fork app's six processes held 58 files in its own profile folder and 17 in its own home, and none in the stock app's home or profile folder. That is what it had open when it was looked at, not a record of everything it opened. :: =lsof -p= with the fork app's process IDs, searched for =/.t3/= and =t3code-v2=
+- The fork app left the shared =t3= command alone. =~/.local/bin/t3= still leads to the stock app's launcher, and the fork app logged that it left another T3 Code app's command in place. That is upstream's own rule for a second T3 home. :: =readlink ~/.local/bin/t3=
+- Opening the fork app took the =t3code://= links from the stock app, and the stock app took them back when it was next opened. Each claims the scheme as it starts. :: =NSWorkspace.urlForApplication(toOpen:)= for =t3code://app/=, read before the launch, after it, and after the stock app reopened
+- The fork app's server has the fork's routes. Asked for the dock without a sign-in it answers 401, where the stock app's server answers with its web page as it does for any path it does not know. :: =curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3774/api/actor-dock=
+- The stock app quit and was opened again while this was checked, and the cause is not known. Seventy seconds after the fork app opened, the stock app was asked to quit from outside its own code and closed in order; it was open again 32 seconds later. The system log records the request and not who sent it. The fork app logged nothing at that moment. The checking session's own record shows its last command before the quit at 14:04:46, a read of the fork app's window list through System Events, and the system log shows no =osascript= process after 14:04:50. A quit from the Dock or the app switcher arrives the same way, so a person may have sent it. :: =log show --start '2026-11-21 14:04:53' --end '2026-11-21 14:04:57'=, the line "Handling Quit AppleEvent"
+- Upstream pins its own names in five test files, which the fork now edits. With the names changed, 17 of the desktop tests failed; 12 of those were for a new name inside the window, which was dropped for that reason. Two Linux icon tests fail on this Mac with or without the fork's change. :: =cd apps/desktop && pnpm exec vp test run=
 
 ** Upstream merges
 Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
