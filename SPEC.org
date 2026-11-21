@@ -19,13 +19,16 @@ The fork stays small enough to merge upstream every week or two without dread. E
 ** Outcome
 - Actors are shown as a dock of pictures at the top of the sidebar, whatever project filter is set.
 - A person sets a thread's picture from its menu. An agent can pin its own thread and set its own picture.
+- An agent that still runs in Rex has a picture in the dock too. Its picture opens its terminal in the main area, with the sidebar still open, so a person can move agents from Rex to T3 Code one at a time.
 - Running waves are listed in the sidebar. A wave's room opens as a tab in the right panel, from the sidebar or from the thread that started the wave.
-- The stock mobile client keeps working with no change.
+- The stock mobile client keeps working with no change. It shows thread actors as upstream shows pinned threads, and no Rex actors.
 
 * Explicit Non-Goals
 - Changing how any provider is run, resumed, compacted or forked.
 - Changing upstream's subagents, side chats or delegate tool. They stay where upstream shows them.
-- A separate "actor" record. An actor is a pinned thread and nothing more.
+- A separate record for an actor. A thread actor is a pinned thread and nothing more. A Rex actor is a few lines in the dock file and nothing more.
+- Running anything in Rex. The fork creates, closes and arranges nothing there. It shows a terminal that Rex already runs, types what the person types, and takes that terminal's size.
+- Rex actors in the mobile client.
 - Changing what pinning, snoozing, settling or archiving do.
 - Changes to the mobile client.
 - A kanban board, a member list or a graph for waves. Room chat comes first.
@@ -37,16 +40,26 @@ The fork stays small enough to merge upstream every week or two without dread. E
 ** Actors
 A person's long-lived agents and how the sidebar shows them.
 
-- Actor :: A thread that upstream lists as pinned: pinned, and neither snoozed nor archived. Pinning a thread makes it an actor. Unpinning it, or settling it, which upstream treats as unpinning, ends that.
+- Actor :: An agent with a place in the dock. It is either a thread actor or a Rex actor.
   /Avoid/: seat, agent, persona
+- Thread actor :: A thread that upstream lists as pinned: pinned, and neither snoozed nor archived. Pinning a thread makes it a thread actor. Unpinning it, or settling it, which upstream treats as unpinning, ends that.
+  /Avoid/: pinned actor, native actor
+- Rex actor :: A terminal that runs in Rex and that the dock file names.
+  /Avoid/: external agent, remote agent, Rex session
+- Dock file :: The file that names an environment's Rex actors, in the order the dock shows them.
+  /Avoid/: config, manifest, registry
+- Viewer :: One open view of a Rex actor's terminal in a T3 Code window. Two windows that show the same Rex actor are two viewers.
+  /Avoid/: client, tab, attachment
 - Dock :: The grid of pictures at the top of the sidebar that stands in for upstream's pinned section.
   /Avoid/: tray, bar, favourites
 - Picture :: What stands for an actor in the dock: one or two characters on a colour, or an image. Every picture is an SVG image, whichever of the two it shows.
   /Avoid/: icon, avatar
-- Picture file :: The SVG file that holds one thread's picture. It belongs to the thread, not to its being pinned, so it survives an unpin.
+- Picture file :: The SVG file that holds one actor's picture. A thread's picture file belongs to the thread, not to its being pinned, so it survives an unpin. A Rex actor's picture file is the one the dock file names.
   /Avoid/: picture record, actor file, profile
-- Default picture :: What the dock draws for an actor that has no picture file: a monogram of its title, derived the way upstream derives a project's, on a colour derived from its thread ID.
+- Default picture :: What the dock draws for an actor that has no picture file: a monogram of its title, derived the way upstream derives a project's, on a colour derived from its thread ID or its name.
   /Avoid/: placeholder, fallback icon
+
+Rex's own words are used as Rex's guide defines them: a /session/ is a group of work, a /block/ is one terminal in it, a /client/ is a program connected to Rex's server, and a block's /owner/ is the client whose size the terminal follows.
 
 ** Waves
 Work that the wave daemon runs and this fork only displays.
@@ -62,13 +75,45 @@ Work that the wave daemon runs and this fork only displays.
 - Seam :: A place where the fork edits a file that upstream owns.
   /Avoid/: patch, hook
 
+* Interfaces, Data Shapes, and State Transitions
+** The dock file
+=actors/dock.kdl= in the environment's state directory. A person or an agent writes it. The server only reads it, each time the dock or a viewer asks.
+
+#+begin_src kdl
+// Agents that still live in Rex.
+rex "scout" {
+    session "scout-desk"   // a Rex session's label or ID; the actor's name when left out
+    block "claude"         // a terminal's label or ID; the session's focused terminal when left out
+    title "Scout"          // what the tooltip and the page say; the name when left out
+    picture "scout.svg"    // an SVG file beside this file; the default picture when left out
+}
+rex "clerk"
+
+// Only needed where Rex does not listen in its usual place.
+rex-socket "/path/to/server.sock"
+#+end_src
+
+The reader takes the part of KDL that means the same in KDL 1 and KDL 2: nodes, quoted strings, numbers, properties, children, comments, the slashdash, and a backslash that continues a line. It refuses a bare word as a value, raw and multi-line strings, type annotations and the keywords for true, false and null, and says on which line.
+
+** Routes
+Both are raw routes beside the picture route, authenticated the way upstream's media routes are.
+
+- =GET /api/actor-dock= returns each Rex actor's name, title and picture, and the dock file's problems with their lines. It does not return which Rex session an actor names.
+- =GET /api/rex-terminal?actor=NAME= upgrades to a WebSocket for one viewer.
+
+** A viewer's connection
+The viewer sends JSON text messages: =open= with its columns and rows, then =write= with typed text, =resize=, and =own= to take the terminal back. The server sends =seed= once, with the screen as escape sequences, its size, and whether output was seen while the screen was read; then the program's output as binary messages; and =size=, =owner=, =exit= and =error= as JSON.
+
+For each viewer the server opens its own client connection to Rex and, in this order: finds the session and the terminal, takes ownership of the terminal, opens the terminal's output stream and steps over the snapshot it starts with, asks for the viewer's size, reads the screen, sends the seed, and from then on relays the stream. Closing the viewer closes both Rex connections with a close frame, and Rex passes the terminal to the next client in line for it.
+
 * Invariants and Hard Constraints
 These are rules the fork imposes on itself. Each says how it is checked; one with no check named is held by review only.
 
-- The dock draws at most 20 pictures. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error. Checked by =splitActorDock= tests.
+- The dock draws at most 20 pictures, thread actors and Rex actors counted together. Upstream puts no limit on pins, so a person or an agent can pin more. Those further actors are never refused and never dropped: they are reached through an overflow entry in the dock. Reaching the limit is an expected state, not an error. Checked by =splitActorDock= tests.
 - The open actor always has a place in the dock. When it would overflow, it takes the last place. Checked by =splitActorDock= tests.
 - The dock ignores the sidebar's project filter, so it shows actors from every connected environment. Everything else about which threads count as pinned follows upstream, by calling upstream's own functions. Checked by =selectActors= tests.
-- The dock's order is upstream's pin order. The fork stores no order of its own: dragging a picture writes upstream's pin order keys, chosen by upstream's own planner and sent by upstream's own command, so stock T3 Code shows the same order. Checked by =planActorMove= tests and the drag scenario.
+- Thread actors come first, in upstream's pin order. The fork stores no order of its own for them: dragging a picture writes upstream's pin order keys, chosen by upstream's own planner and sent by upstream's own command, so stock T3 Code shows the same order. Checked by =planActorMove= tests and the drag scenario.
+- Rex actors come after the thread actors, in the order the dock file lists them. A Rex actor's picture is not dragged: its place is its place in the file.
 - A dropped order shows at once and is held on screen until four seconds after its writes finish. While the writes are in flight no picture can be dragged, so two drops never plan against the same keys. A failed write releases the hold and says so.
 - Every seam is listed under [[*Seams]]. An edit to an upstream file that is not listed there is a defect.
 - New behaviour goes in new files. A seam is a mount point, a list entry or a single branch, never a rewrite.
@@ -80,10 +125,19 @@ These are rules the fork imposes on itself. Each says how it is checked; one wit
 - A picture is only ever shown through an image element, which runs no script and loads nothing the picture points at. The server therefore stores any SVG and sanitises none.
 - A picture file that is not a usable SVG reads as absent and is left on disk untouched. Checked by a server test.
 - A picture is served by the environment that owns the thread.
+- The server never writes the dock file. Checked by review: =grep -n "dock.kdl\|DOCK_FILE_NAME" apps/server/src/actors/*.ts= shows reads only.
+- The dock file is at most 64 KiB, with at most 32 Rex actors, 1024 nodes and blocks nested 8 deep. A line the reader cannot use is reported with its number and skipped; a file it cannot parse lists no actors. Checked by =readDock= and =parseKdl= tests.
+- A picture the dock file names is a file name, never a path, and the file sits beside the dock file. Checked by a =readDock= test.
+- A viewer names a Rex actor. Which session and terminal that is comes from the dock file alone, read on the server. A viewer cannot name a Rex session.
+- A Rex terminal is a shell on the server's machine. Its route needs upstream's terminal scope, and a viewer is closed when its sign-in ends.
+- One server holds at most 16 viewers open. Output held while a terminal opens is at most 8 MiB, typing held behind an unanswered write at most 1 MiB, and output queued for a slow viewer at most 16 MiB; past any of these the viewer is closed.
+- T3 Code never answers a program's questions to the terminal, such as where the cursor is. Rex's own terminal answers them, and a second answer would be typed into the program.
+- Typing reaches Rex one call at a time, each sent after the one before it is answered, because Rex runs separate calls in any order. Checked by a bridge test.
+- The fork works with Rex absent. A Rex actor's picture still shows; opening it says that Rex could not be reached.
 - The fork works with the wave daemon absent. Without it, the wave list is empty and nothing else changes.
 
 ** Seams
-Seven upstream files, 41 lines added and 2 changed, as of the first upstream merge. Measure with =git diff --numstat upstream/main..dock= and leave out the fork's own files.
+Eight upstream files, 63 lines added and 2 changed, as of 2026-11-20. Measure with =git diff --numstat upstream/main...dock= and leave out the fork's own files.
 
 | File | What the fork adds |
 |------+--------------------|
@@ -93,9 +147,32 @@ Seven upstream files, 41 lines added and 2 changed, as of the first upstream mer
 | =apps/web/src/hooks/useThreadActionMenu.ts= | one import and one menu case |
 | =apps/web/src/contextMenuFallback.ts= | one icon at the end of the icon table |
 | =apps/web/src/routes/__root.tsx= | one import and the picture dialog's host |
-| =apps/server/src/server.ts= | one import and one entry in the route list |
+| =apps/server/src/server.ts= | one import and one entry in the route list, which names all the fork's routes at once |
+| =apps/web/src/routeTree.gen.ts= | the Rex actor page's route, 22 lines that upstream's router plugin writes. After a merge that conflicts here, take upstream's file and let the plugin write it again: =cd apps/web && pnpm exec vp test run --project unit src/actors= |
 
-The fork's own files are =apps/web/src/actors/=, =apps/server/src/actors/=, =scripts/scenarios/pinned-thread-joins-actor-dock.e2e.ts= and this spec.
+The fork's own files are =apps/web/src/actors/=, =apps/server/src/actors/=, the route file =apps/web/src/routes/_chat.rex.$rexEnvironmentId.$rexActor.tsx=, three scenarios in =scripts/scenarios/= (=pinned-thread-joins-actor-dock=, =dragged-actor-keeps-its-new-place= and =rex-actor-opens-its-terminal=) and this spec.
+
+* Fault Model
+What can fail at each boundary the Rex actors add, and what the fork does.
+
+| Boundary | What fails | What the fork does |
+|----------+------------+--------------------|
+| The dock file | It is missing | The dock has no Rex actors. |
+| | It does not parse, or is over its size | The dock shows a problem marker that lists the line and the reason. A window that already had the actors keeps them until it is reloaded. |
+| | One node is wrong: a bad name, a duplicate, an unknown setting, a picture that is a path | That node or setting is skipped and reported with its line. The rest is used. |
+| Rex's server | It is not running, or does not answer within 5 seconds to connect and 8 seconds a call | The viewer is told why and closed. The window tries again after 0.5, 2 and 5 seconds, then offers a button. |
+| | Either connection to it drops | The same. Nothing is resumed: a new viewer reads the screen afresh. |
+| | The session or the terminal the dock file names is not there, or two sessions share the label | The viewer is told which, and closed. The window does not try again by itself. |
+| | The terminal closes in Rex | The viewer is told, and closed. The window does not try again by itself. |
+| | Another Rex client takes the terminal | The viewer keeps drawing at the size that client sets, says so, and offers to take it back. |
+| | Output arrives while the screen is being read | See below. |
+| A viewer | It sends something that is not one of its four messages, or too much | It is closed. |
+| | It reads too slowly | It is closed once 16 MiB wait for it. |
+| | Its sign-in ends | It is closed, and both Rex connections with it. |
+
+Rex gives the screen in one call and the output on another connection, and nothing ties a place in one to a place in the other. Output received before the screen was asked for is already in the screen, so it is dropped. Output received while that call was in flight may be in the screen or not. So the server waits for output to pause for 40 ms, up to 300 ms, reads the screen, and reads it again if any output arrived during the read, four times at most. If the terminal never pauses, the last screen is sent and the output from its read is drawn after it: that output can show twice until the program next repaints.
+
+This narrows the error and does not remove it. The two connections share no order, so output written just before the read can arrive after the read's answer and be drawn twice, with no output seen during the read. Nothing has compared the drawn screen with Rex's own on a busy terminal. Loading Rex's snapshot instead would be exact with no waiting; see [[*Open Questions]].
 
 * Verification Policy
 ** Upkeep
@@ -133,6 +210,32 @@ Known gaps, each a decision the build made to stay small:
 - Upstream's next and previous thread keys still step through pinned threads, which now have no row to show which one is open. The dock marks it instead.
 - An actor on a machine that runs stock T3 Code shows in the dock with its default picture. That machine has no picture route, so its picture cannot be set from the dialog.
 
+** TODO Live with Rex actors
+Rex actors work in the real app; see [[*Rex actors, 2026-11-20]]. The owner asked for them on 2026-11-20 and chose a KDL file and taking ownership. These parts are built and not yet seen working there:
+
+- An agent's own interface. A shell and vim have been run. An agent's interface redraws part of the screen in place and uses the Kitty keyboard protocol; the engine was checked for the second with a capture, not with an agent.
+- "Take over" in the window. The server's side of it was run against Rex; the button was not pressed.
+- A viewer whose sign-in ends, and a slow viewer. Each is written to close the viewer; neither was made to happen.
+- Rex's server stopping while a terminal is open. Rex not being there when a terminal opens was run; a connection that drops later was not.
+- A busy terminal's first paint. Against real Rex, with a loop printing every 5 ms, the server saw no output during its read; nothing compared the drawn screen with Rex's own. The path where output is seen during every read runs in tests only, with a fake Rex.
+- A scrollback long enough to come from Rex in parts. Tested with a fake Rex only.
+- Two sessions with one label, a named block, a Rex actor's picture file, and a 21st actor that is a Rex actor.
+- Rex on a machine that is not a Mac, where the dock file has to say where Rex listens.
+- A second environment that has Rex actors.
+
+Known gaps, each a decision the build made to stay small:
+
+- The mobile client shows no Rex actors. The route and the viewer's connection would serve it; the mobile client would need a screen for them, and the fork changes nothing there.
+- A Rex actor's picture has no menu. Its picture, title and place are set in the dock file.
+- A Rex actor's picture shows no status. Rex reports what a terminal's program last said it was doing, such as working or waiting for an answer; the dock does not ask.
+- While another Rex client owns the terminal and its size is larger than the pane, the pane draws at its own smaller size and lines wrap differently from that client's.
+- Input that is not text, such as the oldest form of mouse report, is dropped: Rex's typing call takes text.
+- The terminal's colours are T3 Code's. Colours a person set for the terminal in Rex are not carried over.
+- A link in the terminal opens only when it is a web address. A file path does nothing.
+- Upstream's next and previous thread keys do not stop at a Rex actor.
+- The dock file is read when a window gains focus or the set of environments changes, not when the file changes.
+- The WebSocket library offers compression to Rex and Rex accepts it, on both connections. Rex's guide asks that the first message of the control connection not be compressed; the library compresses nothing it sends, and the first message carries no secret here.
+
 ** TODO Show waves
 Blocked on the wave daemon being able to start workers as T3 Code threads, which is work in the wave daemon's repository.
 
@@ -146,7 +249,9 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
 - Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. The release build has been read, not run; see [[*The daily client and Rex, 2026-11-20]].
-- Should the dock also hold actors that run in Rex, a terminal multiplexer, and show such an actor's terminal in the main area with the sidebar still open? The owner raised it on 2026-11-20 as a way to move over gradually. The probe ran on 2026-11-20 and T3 Code's terminal can draw it; see [[*The Rex probe, 2026-11-20]]. Decides: the owner, who has not yet said to build it. Three choices follow from a yes. Where the list of Rex actors is kept, since the fork today stores nothing but pictures. Whether the first build paints from Rex's screen text or loads Rex's snapshot. Whether T3 Code takes ownership of a terminal it shows, which gives the Rex app T3 Code's size for that terminal.
+- Should Rex actors show in the mobile client? The owner moves to T3 Code partly for its mobile client, and an agent still in Rex is absent there. It means the fork's first change to the mobile client. Decides: the owner.
+- Should the server load Rex's snapshot instead of reading the screen? It would make the first paint exact, where today's is a close guess, and need no waiting. The web engine's Ghostty is too old to load it, and moving that pin is a seam in upstream's build. A second, newer engine on the server could load the snapshot and write it out as escape sequences, in the fork's own files. Decides: the maintainer, if the inexact path shows up in use.
+- Should a Rex actor's picture show what its program reports, such as working or waiting? Decides: the owner, after using Rex actors.
 - What does the dock show for an actor whose environment is disconnected? The owner wants actors from every environment in the dock. Decides: a test with a second environment.
 - How does the server reach the wave daemon: its command line, its socket or its MCP endpoint? Decides: the maintainer, when waves are built.
 - Does typing =/clear= in the composer start a new provider session under the same thread? Decides: a test.
@@ -194,6 +299,21 @@ Run against Rex =0.1.0-preview.21=, API revision 18, on a scratch session that t
 - A browser cannot open a Unix socket, so T3 Code's server has to stand between a web or mobile client and Rex. T3 Code's own terminals already reach the client as a history string followed by output events, which is the shape the unchanged engine was fed. :: =grep -n "nextTerminalAttachSeedState" apps/web/src/terminal/ghostty/core.test.ts=
 - A terminal's owner sets its size and colours for every client, the Rex app included. The probe took no ownership and resized nothing. :: the guide, "How Rex Is Organized"
 - Someone has already built a third-party Rex client that draws panes with libghostty from this stream: RexPocket, for Android. Its record framing for the snapshot matched the real bytes. :: =https://github.com/leizhiyuan/rexpocket=
+
+** Rex actors, 2026-11-20
+Built against Rex =0.1.0-preview.21=, API revision 18. Every run used a Rex session it created and removed; the server had seven sessions before and after each.
+
+- A Rex actor works in the real app. One scenario writes a dock file that names a new Rex session; sees the actor's picture in the dock; opens it and finds the terminal live with the sidebar's rows still there; finds that Rex now reports an owner and a different width; types a command in T3 Code and reads its result back from Rex; has Rex's program print and sees the pane change; leaves for a thread and returns; then breaks the dock file and reads the line and reason in the dock. It needs a Rex server on the machine. :: =cd scripts && pnpm exec e2e run scenarios/rex-actor-opens-its-terminal.e2e.ts=
+- A Rex actor whose session is not there says so and stops, and Rex being unreachable says so, tries again by itself and then offers a button. The scenario names a session that does not exist and reads the reason in the page with no retry; then points the dock file at a socket nobody listens on, reads "Rex could not be reached", sees the retries end in a button, puts the socket back and opens the terminal with that button, which also shows the server came through. The first build cut the viewer's connection straight after the close message, so neither the reason nor the close code arrived and the window retried a session that was never there; the server now waits up to two seconds for the viewer to close its side. :: the same scenario
+- The screen that was there before T3 Code connected is drawn: the scenario's first screenshot shows a line the shell printed earlier. :: the same scenario, =002-rex-terminal-open.png=
+- A full-screen program is drawn and driven. vim was started in Rex at 80 by 24 with a search highlighted; T3 Code took the terminal at 129 by 41, vim repainted at that size with its colours and status line, and paging, a jump to the last line and a typed line all reached it. A one-off scenario, not kept. :: screenshots in the owner's evidence folder, =t3code-rex-actors.2026-11-20=
+- The server's library reaches Rex. undici's WebSocket, which =apps/server= already declares, connects to Rex's Unix socket through an agent and carries Rex's subprotocols. No dependency was added. :: the scenario
+- Rex answers a program's questions to the terminal itself, with no viewer, with a viewer, and with an owner: a program that asked what kind of terminal it was in got one answer each time. So T3 Code drops its own engine's answers. :: a one-off probe
+- Ownership behaves as Rex's guide says. Taking a terminal and asking for 100 by 30 gave that size. A second client that took it made the first one's terminal follow the second's size, and when the second left, Rex gave the terminal back to the first at the first's size. :: a one-off run of the bridge against Rex
+- The engine ends up in the program's keyboard state. Fed the screen Rex returned for a program that had switched on the Kitty keyboard protocol and bracketed paste, T3 Code's engine encoded Shift+Enter as that protocol does, wrapped a paste, and sent no answers of its own. The screen was 100 by 30 with 5984 lines of scrollback above it. :: a one-off engine test on a capture
+- Against real Rex, with a loop printing every 5 ms, the server saw no output during its read of the screen. That is the server's own observation and not a comparison of screens. The path where output arrives during every read is reached in tests only, with a fake Rex. :: =cd apps/server && pnpm exec vp test run src/actors/RexTerminalBridge.test.ts=
+- The snapshot at the start of the stream is stepped over wherever the stream is cut, and a record whose contents look like the last record does not end it. The first build told the stream's 10-byte opening from a 10-byte record header by their length, and so read every record as the opening; the run against real Rex caught it. :: =cd apps/server && pnpm exec vp test run src/actors/rexStream.test.ts=
+- The dock file's reader, the bridge and the stream readers pass 29 tests, and upstream's checks pass on the change. :: =cd apps/server && pnpm exec vp test run src/actors= and =pnpm exec vp run check:changed=
 
 ** Upstream merges
 Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
