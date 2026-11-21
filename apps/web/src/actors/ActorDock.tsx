@@ -16,6 +16,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { type ComponentProps, useEffect, useState } from "react";
 
 import {
@@ -48,8 +49,19 @@ import {
   splitActorDock,
 } from "./actorPicture.logic";
 import { loadActorPictures, useActorPictureSvg } from "./actorPictures";
+import {
+  loadRexActors,
+  type RexActor,
+  rexActorKey,
+  useDockFileProblems,
+  useRexActors,
+} from "./rexActors";
 
 type Actor = ReturnType<typeof useQuietThreadShells>[number];
+/** One place in the dock: a pinned thread, or a terminal in Rex that the dock file names. */
+type DockEntry =
+  | { readonly kind: "thread"; readonly key: string; readonly actor: Actor }
+  | { readonly kind: "rex"; readonly key: string; readonly actor: RexActor };
 
 /** How long a dropped order stays on screen after its writes finish, while the server's own report arrives. */
 const ACTOR_ORDER_HOLD_MS = 4000;
@@ -182,6 +194,59 @@ function ActorTile(props: ActorTileProps) {
   );
 }
 
+function RexActorPicture(props: { readonly actor: RexActor; readonly className?: string }) {
+  const { actor } = props;
+  return (
+    <img
+      src={pictureImageUrl(
+        actor.svg ?? defaultPictureSvg({ id: rexActorKey(actor), title: actor.title }),
+      )}
+      alt=""
+      draggable={false}
+      className={cn("rounded-[25%] object-cover", props.className)}
+    />
+  );
+}
+
+/** A Rex actor's place is its place in the dock file, so its tile is not dragged. */
+function RexActorTile(props: {
+  readonly actor: RexActor;
+  readonly active: boolean;
+  readonly onOpen: (actor: RexActor) => void;
+}) {
+  const { actor, active } = props;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            data-testid="rex-actor-tile"
+            aria-label={`${actor.title}, in Rex`}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative aspect-square w-full cursor-pointer rounded-[25%] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+              active
+                ? "ring-2 ring-sidebar-foreground/80"
+                : "opacity-90 hover:opacity-100 hover:ring-1 hover:ring-sidebar-foreground/40",
+            )}
+            onClick={() => props.onOpen(actor)}
+          />
+        }
+      >
+        <RexActorPicture actor={actor} className="size-full" />
+        <span
+          aria-hidden
+          className="absolute -right-0.5 -bottom-0.5 rounded-sm bg-sidebar px-0.5 font-mono text-4xs leading-3 font-semibold text-sidebar-foreground ring-1 ring-sidebar-foreground/30"
+        >
+          {">_"}
+        </span>
+      </TooltipTrigger>
+      <TooltipPopup side="bottom">{`${actor.title} · Rex`}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
 function ActorOverflowRow(props: {
   readonly actor: Actor;
   readonly onOpen: (threadRef: ScopedThreadRef) => void;
@@ -222,6 +287,20 @@ export function ActorDock(props: {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: ACTOR_DRAG_START_PX } }),
   );
+  const navigate = useNavigate();
+  const rexActors = useRexActors();
+  const dockFileProblems = useDockFileProblems();
+  const activeRexKey = useParams({
+    strict: false,
+    select: (params) =>
+      params.rexEnvironmentId !== undefined && params.rexActor !== undefined
+        ? rexActorKey({
+            environmentId: params.rexEnvironmentId as EnvironmentId,
+            name: params.rexActor,
+          })
+        : null,
+  });
+  const connectedEnvironmentsKey = JSON.stringify([...connectedEnvironmentIds].toSorted());
   const pinned = selectActors({
     threads,
     delegatedUnderParent,
@@ -249,15 +328,35 @@ export function ActorDock(props: {
     return () => window.removeEventListener("focus", load);
   }, [actorRefsKey]);
 
-  if (actors.length === 0) return null;
-  const { shown, overflow } = splitActorDock(
-    actors,
-    (actor) => keyOf(actor) === props.activeThreadKey,
-  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reads each connected environment's dock file when the set of environments changes or the window regains focus, since a person or an agent edits that file by hand
+  useEffect(() => {
+    const environmentIds = JSON.parse(connectedEnvironmentsKey) as EnvironmentId[];
+    const load = () => void loadRexActors(environmentIds);
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, [connectedEnvironmentsKey]);
+
+  if (actors.length === 0 && rexActors.length === 0 && dockFileProblems.length === 0) return null;
+  // Pinned threads come first, in pin order. Rex actors follow, in the order of the dock file.
+  const entries: DockEntry[] = [
+    ...actors.map((actor) => ({ kind: "thread" as const, key: keyOf(actor), actor })),
+    ...rexActors.map((actor) => ({ kind: "rex" as const, key: rexActorKey(actor), actor })),
+  ];
+  const activeKey = activeRexKey ?? props.activeThreadKey;
+  const split = splitActorDock(entries, (entry) => entry.key === activeKey);
+  const overflow = split.overflow;
   // The open actor borrows the last place when its own is in the overflow, so that tile has no place in the order to drag from or to.
-  const lastShown = shown.at(-1);
-  const borrowed = lastShown !== undefined && actors[shown.length - 1] !== lastShown;
-  const sortable = borrowed ? shown.slice(0, -1) : shown;
+  const lastShown = split.shown.at(-1);
+  const borrowed = lastShown !== undefined && entries[split.shown.length - 1] !== lastShown;
+  const placed = borrowed ? split.shown.slice(0, -1) : split.shown;
+  const sortable = placed.flatMap((entry) => (entry.kind === "thread" ? [entry.actor] : []));
+  const shownRexActors = placed.flatMap((entry) => (entry.kind === "rex" ? [entry.actor] : []));
+  const openRexActor = (actor: RexActor) =>
+    void navigate({
+      to: "/rex/$rexEnvironmentId/$rexActor",
+      params: { rexEnvironmentId: actor.environmentId, rexActor: actor.name },
+    });
   const { draggableThreadKeys: writableKeys } = resolveSidebarReorderableThreadKeys({
     threads: actors,
     serverConfigs,
@@ -347,14 +446,25 @@ export function ActorDock(props: {
           ))}
         </SortableContext>
       </DndContext>
-      {borrowed && lastShown !== undefined ? (
+      {shownRexActors.map((actor) => (
+        <RexActorTile
+          key={rexActorKey(actor)}
+          actor={actor}
+          active={rexActorKey(actor) === activeKey}
+          onOpen={openRexActor}
+        />
+      ))}
+      {borrowed && lastShown?.kind === "thread" ? (
         <ActorTile
-          key={keyOf(lastShown)}
-          actor={lastShown}
+          key={lastShown.key}
+          actor={lastShown.actor}
           active
-          projectCwd={projectCwd(lastShown)}
+          projectCwd={projectCwd(lastShown.actor)}
           onOpen={props.onOpen}
         />
+      ) : null}
+      {borrowed && lastShown?.kind === "rex" ? (
+        <RexActorTile key={lastShown.key} actor={lastShown.actor} active onOpen={openRexActor} />
       ) : null}
       {overflow.length > 0 ? (
         <Popover>
@@ -372,8 +482,48 @@ export function ActorDock(props: {
           </PopoverTrigger>
           <PopoverPopup side="bottom" align="start">
             <div className="flex max-h-80 w-56 flex-col gap-px overflow-y-auto">
-              {overflow.map((actor) => (
-                <ActorOverflowRow key={keyOf(actor)} actor={actor} onOpen={props.onOpen} />
+              {overflow.map((entry) =>
+                entry.kind === "thread" ? (
+                  <ActorOverflowRow key={entry.key} actor={entry.actor} onOpen={props.onOpen} />
+                ) : (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    data-testid="actor-overflow-row"
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent"
+                    onClick={() => openRexActor(entry.actor)}
+                  >
+                    <RexActorPicture actor={entry.actor} className="size-5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{entry.actor.title}</span>
+                    <span className="text-xs text-muted-foreground">Rex</span>
+                  </button>
+                ),
+              )}
+            </div>
+          </PopoverPopup>
+        </Popover>
+      ) : null}
+      {dockFileProblems.length > 0 ? (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                data-testid="dock-file-problems"
+                aria-label={`${dockFileProblems.length} problems in the dock file`}
+                className="flex aspect-square w-full cursor-pointer items-center justify-center rounded-[25%] border border-dashed border-destructive/60 text-sm font-semibold text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              />
+            }
+          >
+            !
+          </PopoverTrigger>
+          <PopoverPopup side="bottom" align="start">
+            <div className="flex max-h-80 w-72 flex-col gap-1 overflow-y-auto text-sm">
+              <p className="font-medium">actors/dock.kdl</p>
+              {dockFileProblems.map((problem) => (
+                <p key={`${problem.environmentId}:${problem.line}:${problem.message}`}>
+                  Line {problem.line}: {problem.message}
+                </p>
               ))}
             </div>
           </PopoverPopup>

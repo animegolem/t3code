@@ -53,6 +53,7 @@ import { Route as ChatSettingsAccessRouteImport } from './routes/_chat.settings.
 import { Route as ChatSettingsAboutRouteImport } from './routes/_chat.settings.about'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as ChatRexRexEnvironmentIdRexActorRouteImport } from './routes/_chat.rex.$rexEnvironmentId.$rexActor'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
@@ -279,6 +280,12 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatRexRexEnvironmentIdRexActorRoute =
+  ChatRexRexEnvironmentIdRexActorRouteImport.update({
+    id: '/rex/$rexEnvironmentId/$rexActor',
+    path: '/rex/$rexEnvironmentId/$rexActor',
+    getParentRoute: () => ChatRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
@@ -324,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/rex/$rexEnvironmentId/$rexActor': typeof ChatRexRexEnvironmentIdRexActorRoute
 }
 export interface FileRoutesByTo {
   '/approve-agent': typeof ApproveAgentRoute
@@ -369,6 +377,7 @@ export interface FileRoutesByTo {
   '/settings/voice': typeof ChatSettingsVoiceRoute
   '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/rex/$rexEnvironmentId/$rexActor': typeof ChatRexRexEnvironmentIdRexActorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -416,6 +425,7 @@ export interface FileRoutesById {
   '/_chat/settings/voice': typeof ChatSettingsVoiceRoute
   '/_chat/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/threads/$environmentId/$threadId': typeof ThreadsEnvironmentIdThreadIdRoute
+  '/_chat/rex/$rexEnvironmentId/$rexActor': typeof ChatRexRexEnvironmentIdRexActorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -463,6 +473,7 @@ export interface FileRouteTypes {
     | '/settings/voice'
     | '/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/rex/$rexEnvironmentId/$rexActor'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/approve-agent'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/settings/voice'
     | '/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/rex/$rexEnvironmentId/$rexActor'
   id:
     | '__root__'
     | '/_chat'
@@ -554,6 +566,7 @@ export interface FileRouteTypes {
     | '/_chat/settings/voice'
     | '/_chat/settings/worktrees'
     | '/threads/$environmentId/$threadId'
+    | '/_chat/rex/$rexEnvironmentId/$rexActor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -878,6 +891,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/rex/$rexEnvironmentId/$rexActor': {
+      id: '/_chat/rex/$rexEnvironmentId/$rexActor'
+      path: '/rex/$rexEnvironmentId/$rexActor'
+      fullPath: '/rex/$rexEnvironmentId/$rexActor'
+      preLoaderRoute: typeof ChatRexRexEnvironmentIdRexActorRouteImport
+      parentRoute: typeof ChatRoute
+    }
   }
 }
 
@@ -954,6 +974,7 @@ interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatRexRexEnvironmentIdRexActorRoute: typeof ChatRexRexEnvironmentIdRexActorRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
@@ -965,6 +986,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatRexRexEnvironmentIdRexActorRoute: ChatRexRexEnvironmentIdRexActorRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)

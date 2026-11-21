@@ -1,46 +1,13 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import {
-  type DeviceHubAccess,
-  resolveDeviceHubAccess,
-  withDeviceHubQuery,
-} from "@t3tools/client-runtime/state/deviceHubAccess";
+import { withDeviceHubQuery } from "@t3tools/client-runtime/state/deviceHubAccess";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { Atom, AtomRegistry } from "effect/reactivity";
 import { create } from "zustand";
 
-import { connectionAtomRuntime } from "../connection/runtime";
-import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentSession } from "../state/session";
+import { freshActorAccess } from "./actorAccess";
 
 const ACTOR_PICTURES_ROUTE = "/api/actor-pictures";
 /** Mirrors the server's cap on one read. */
 const ACTOR_PICTURES_MAX_PER_READ = 24;
-
-const accessAtom = Atom.family((environmentId: EnvironmentId) =>
-  connectionAtomRuntime
-    .atom((get) => {
-      const prepared = Option.getOrNull(
-        get(environmentSession.preparedConnectionValueAtom(environmentId)),
-      );
-      if (prepared === null) return Effect.never;
-      return resolveDeviceHubAccess({ prepared, hubBasePath: ACTOR_PICTURES_ROUTE });
-    })
-    .pipe(Atom.setIdleTTL(60_000), Atom.withLabel(`actor-pictures-access:${environmentId}`)),
-);
-
-// A ticket can be single-use, so every request mints its own.
-function freshAccess(environmentId: EnvironmentId): Promise<DeviceHubAccess | null> {
-  const atom = accessAtom(environmentId);
-  appAtomRegistry.refresh(atom);
-  return Effect.runPromise(
-    AtomRegistry.getResult(appAtomRegistry, atom, { suspendOnWaiting: true }).pipe(
-      Effect.timeout("10 seconds"),
-      Effect.orElseSucceed(() => null),
-    ),
-  );
-}
 
 const useActorPictureStore = create<{ readonly svgByThreadKey: Readonly<Record<string, string>> }>(
   () => ({ svgByThreadKey: {} }),
@@ -85,7 +52,7 @@ async function loadEnvironmentPictures(
 ): Promise<void> {
   for (let start = 0; start < threadRefs.length; start += ACTOR_PICTURES_MAX_PER_READ) {
     const batch = threadRefs.slice(start, start + ACTOR_PICTURES_MAX_PER_READ);
-    const access = await freshAccess(environmentId);
+    const access = await freshActorAccess(environmentId, ACTOR_PICTURES_ROUTE);
     if (access === null) return;
     const search = new URLSearchParams(batch.map((ref) => ["thread", ref.threadId]));
     const response = await fetch(withDeviceHubQuery(`${access.httpBase}?${search}`, access), {
@@ -117,7 +84,7 @@ export async function saveActorPicture(
   threadRef: ScopedThreadRef,
   svg: string | null,
 ): Promise<void> {
-  const access = await freshAccess(threadRef.environmentId);
+  const access = await freshActorAccess(threadRef.environmentId, ACTOR_PICTURES_ROUTE);
   if (access === null) throw new Error("This thread's environment is not connected.");
   const search = new URLSearchParams({ thread: threadRef.threadId });
   const response = await fetch(withDeviceHubQuery(`${access.httpBase}?${search}`, access), {
