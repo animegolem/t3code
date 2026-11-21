@@ -210,6 +210,29 @@ Known gaps, each a decision the build made to stay small:
 - Upstream's next and previous thread keys still step through pinned threads, which now have no row to show which one is open. The dock marks it instead.
 - An actor on a machine that runs stock T3 Code shows in the dock with its default picture. That machine has no picture route, so its picture cannot be set from the dialog.
 
+** TODO Launch the Mac build
+The fork is built into a Mac app that nobody has opened; see [[*The Mac build, 2026-11-20]]. Opening it is the owner's step, because the installed app has to be quit first and that ends every session running in it. The disk image is =release/T3-Code-0.1.11-arm64.dmg= in the repository; build it again with =RUSTUP_TOOLCHAIN=stable pnpm run dist:desktop:dmg:arm64=.
+
+The built app has the stock app's name, ID and version. The dock of pictures at the top of the sidebar is how to tell the fork from the stock app.
+
+1. Quit the installed app. In Finder, rename it in =/Applications= to "T3 Code (Beta) stock.app" instead of deleting it, so that going back is a rename.
+2. Optional, and only after quitting: copy =~/.t3/userdata= somewhere as a backup. A copy taken while the app runs can be inconsistent.
+3. Open the disk image and drag the app to =/Applications=.
+4. First launch on a trial T3 home, which leaves the real threads and database alone:
+   =T3CODE_HOME="$HOME/.t3-fork-trial" T3CODE_DISABLE_AUTO_UPDATE=true "/Applications/T3 Code (Beta).app/Contents/MacOS/T3 Code (Beta)"=
+   Expect an empty app. Watch for a keychain prompt and whether the window is still signed in.
+5. To try a Rex actor there, write =~/.t3-fork-trial/userdata/actors/dock.kdl= with one =rex "name"= node that names a Rex session, and bring the window to the front.
+6. Quit, then open the app normally. It now runs on the real data. The dock file for it is =~/.t3/userdata/actors/dock.kdl=.
+7. To go back: quit, delete the fork's app, and rename the stock app back.
+
+Not yet seen, each to note on the first launch:
+
+- Whether the app opens at all without a signature, and what macOS asks.
+- Whether the keychain lets a differently signed app read the stored key, and so whether stored sign-in and provider secrets still open.
+- Whether T3 Connect signs in, and whether the phone app still reaches this Mac.
+- Rex actors in the packaged app. They were run in a dev run only.
+- Going back to the stock app afterwards.
+
 ** TODO Live with Rex actors
 Rex actors work in the real app; see [[*Rex actors, 2026-11-20]]. The owner asked for them on 2026-11-20 and chose a KDL file and taking ownership. These parts are built and not yet seen working there:
 
@@ -248,7 +271,8 @@ Upstream has an open pull request, =pingdotgg/t3code#15988=, that keeps threads 
 
 * Open Questions
 - How are more than ten actors laid out: more rows, or two rows and an overflow menu where a person chooses which are shown? The first build wraps to as many rows as 20 pictures need. Decides: the owner, after using the dock.
-- Does the fork replace the installed app as the daily client, and if so how is it built and updated? Decides: the owner. The release build has been read, not run; see [[*The daily client and Rex, 2026-11-20]].
+- Does the fork replace the installed app as the daily client, and if so how is it updated? Decides: the owner. The fork builds into a Mac app that has not been launched; see [[*The Mac build, 2026-11-20]]. Still to find out by launching it: whether the stored sign-in and secrets open for an app with a different signature, and whether T3 Connect signs in.
+- Should a local build be signed with the owner's own Apple development certificate? An unsigned build has a different identity each time it is built, so macOS may ask again for the keychain and for permissions such as the microphone after every rebuild. Decides: the owner.
 - Should Rex actors show in the mobile client? The owner moves to T3 Code partly for its mobile client, and an agent still in Rex is absent there. It means the fork's first change to the mobile client. Decides: the owner, who held it off on 2026-11-20: Rex actors are a way across while it is not settled where the house's own tools will live.
 - Should the server load Rex's snapshot instead of reading the screen? It would make the first paint exact, where today's is a close guess, and need no waiting. The web engine's Ghostty is too old to load it, and moving that pin is a seam in upstream's build. A second, newer engine on the server could load the snapshot and write it out as escape sequences, in the fork's own files. Decides: the maintainer, if the inexact path shows up in use.
 - Should a Rex actor's picture show what its program reports, such as working or waiting? Decides: the owner, after using Rex actors.
@@ -275,9 +299,9 @@ Results come from three places: reading upstream's source at commit =983654b3b2=
 ** The daily client and Rex, 2026-11-20
 Read from upstream's docs and tags and from the installed Rex command line, version =0.1.0-preview.21=. Nothing here was built.
 
-- The fork may not open the installed app's data today. The installed app last ran as =0.1.11=, and that tag has three database migrations (100 to 102) that the fork's merge base lacks. The fork has to merge upstream to at least the version that last opened the data before it is pointed there. :: =git diff --name-status v0.1.11..00200bd412 -- apps/server/src/persistence/Migrations=
+- The fork may not open the installed app's data today. The installed app last ran as =0.1.11=, and that tag has three database migrations (100 to 102) that the fork's merge base lacks. The fork has to merge upstream to at least the version that last opened the data before it is pointed there. :: =git diff --name-status v0.1.11..00200bd412 -- apps/server/src/persistence/Migrations= (No longer so after the second upstream merge; see [[*The Mac build, 2026-11-20]].)
 - The fork adds no migration, so a fork build and a stock build made from the same upstream commit can take turns on the same data. A fork built from =main= moves the data ahead of the stable app.
-- Upstream builds a macOS app with =pnpm run dist:desktop:dmg:arm64=. Not run. Whether an unsigned local build can sign in to T3 Connect, and how its updater is kept from installing a stock release over it, are not known.
+- Upstream builds a macOS app with =pnpm run dist:desktop:dmg:arm64=. Not run. Whether an unsigned local build can sign in to T3 Connect, and how its updater is kept from installing a stock release over it, are not known. (Run later the same day, and the updater question answered; see [[*The Mac build, 2026-11-20]].)
 - A dev run in a linked worktree seeds its database from a read-only copy of the installed app's, when that is at most 500 MiB. The main checkout uses =~/.t3/dev= and is not seeded. :: =docs/operations/development.md=, "State and ports"
 - Rex has no command that attaches a terminal to a running session. =rex block stream= exists and answers "not implemented". :: =rex --help= and =rex block stream BLOCK=
 - Rex's server streams a terminal to a client over a data connection opened with a single-use ticket, under the name =rex.data.terminal.v1=. What travels on it has not been seen. :: =rex api describe data.connect= (Seen later the same day; see [[*The Rex probe, 2026-11-20]].)
@@ -314,6 +338,21 @@ Built against Rex =0.1.0-preview.21=, API revision 18. Every run used a Rex sess
 - Against real Rex, with a loop printing every 5 ms, the server saw no output during its read of the screen. That is the server's own observation and not a comparison of screens. The path where output arrives during every read is reached in tests only, with a fake Rex. :: =cd apps/server && pnpm exec vp test run src/actors/RexTerminalBridge.test.ts=
 - The snapshot at the start of the stream is stepped over wherever the stream is cut, and a record whose contents look like the last record does not end it. The first build told the stream's 10-byte opening from a 10-byte record header by their length, and so read every record as the opening; the run against real Rex caught it. :: =cd apps/server && pnpm exec vp test run src/actors/rexStream.test.ts=
 - The dock file's reader, the bridge and the stream readers pass 29 tests, and upstream's checks pass on the change. :: =cd apps/server && pnpm exec vp test run src/actors= and =pnpm exec vp run check:changed=
+
+** The Mac build, 2026-11-20
+Built from the second upstream merge, =b32c07c190=, on an Apple silicon Mac. The app was unpacked and read. It was not launched.
+
+- The fork builds into a Mac app. The command wrote a 237 MB disk image and a zip into =release/=, which git ignores, and changed no tracked file. :: =RUSTUP_TOOLCHAIN=stable pnpm run dist:desktop:dmg:arm64=
+- The build needs a Rust of 1.95 or later for the resource monitor. With an older default it fails at that step; naming the toolchain in the command is enough. Upstream's release job uses =stable=. :: the same command without the variable, on a machine whose default Rust is 1.90
+- The built app has the stock app's identity: the ID =com.t3tools.t3code=, the name "T3 Code (Beta)" and version 0.1.11. It would take the stock app's place in =/Applications=, and use the same T3 home and the same Electron profile. :: =defaults read "T3 Code (Beta).app/Contents/Info.plist" CFBundleIdentifier=
+- The two cannot run at once. The packaged app's Electron profile is one fixed folder whatever the T3 home is, and the app takes a single-instance lock there. So the build could not be launched beside the installed app, which was running. :: =grep -n "t3code-v2" apps/desktop/src/app/DesktopUserData.ts= and =grep -n "requestSingleInstanceLock" apps/desktop/src/app/DesktopClerk.ts=
+- The build is not signed. Its main program carries only the signature the linker adds, and the bundle as a whole does not verify. :: =codesign -dv= and =codesign --verify --deep --strict= on the app
+- The build will not update itself. With no update repository named at build time the app ships no update feed, and the updater turns itself off when there is none. So a stock release cannot install itself over the fork. Read in the source and seen in the app: it has no =app-update.yml=. :: =grep -n "no update feed is configured" apps/desktop/src/updates/DesktopUpdates.ts= and =ls "T3 Code (Beta).app/Contents/Resources"=
+- The fork's code is in the app: the Rex terminal route, the dock route, the dock file's name and the Rex tile. :: =grep -c -a "/api/rex-terminal" "T3 Code (Beta).app/Contents/Resources/app.asar"=
+- The installed app and the fork read the same database. The installed app is 0.1.11, and the whole persistence folder is the same at that tag and at the merged upstream commit, so neither moves the database past the other. The earlier line that the fork was behind by three migrations was true of the first merge base and is no longer. :: =git diff --stat v0.1.11 a6e81f3002 -- apps/server/src/persistence= prints nothing
+- That is shown for the database only. The merged upstream is 157 commits and 730 files past 0.1.11, and the other things kept in the state directory, such as settings, key bindings and stored secrets, were not compared. Going back to the stock app after running the fork is a downgrade across those 157 commits, and has not been tried.
+- Upstream has a supported way to run a packaged app on a T3 home of its own: its release check sets =T3CODE_HOME= and =T3CODE_DISABLE_AUTO_UPDATE=. A first launch that way leaves the real database, threads and state directory alone. It still uses the one Electron profile, which holds the window's sign-in and its own stored state. :: =scripts/smoke-desktop-app.ts=
+- Whether the packaged server can reach Rex is not shown. The WebSocket library's code is in the app's bundle; it has not run from there. :: =grep -c -a undici "T3 Code (Beta).app/Contents/Resources/app.asar"=
 
 ** Upstream merges
 Each merge is recorded here: the date, how far upstream had moved, what conflicted, and the time it took including the checks.
